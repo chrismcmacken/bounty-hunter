@@ -1,0 +1,164 @@
+rules:
+  # =============================================================================
+  # Symlink Following in File Operations
+  # =============================================================================
+  # Behavioral pattern: File operations follow symlinks after path validation
+  # only checks the symlink path, not the destination.
+  #
+  # Pattern source: CVE-2025-8110 (Gogs RCE)
+  # Pattern class: traversal/symlink-follow
+  # =============================================================================
+
+  # ---------------------------------------------------------------------------
+  # Python: Archive extraction without symlink filtering (HIGH confidence)
+  # ---------------------------------------------------------------------------
+  - id: python-archive-extractall-no-filter
+    languages: [python]
+    severity: ERROR
+    paths:
+      exclude:
+        - "**/test/**"
+        - "**/tests/**"
+        - "**/*_test.py"
+        - "**/*_tests.py"
+    patterns:
+      - pattern-either:
+          - pattern: $TAR.extractall(...)
+          - pattern: $ZIP.extractall(...)
+      - pattern-either:
+          - pattern-inside: |
+              $TAR = tarfile.open(...)
+              ...
+          - pattern-inside: |
+              with tarfile.open(...) as $TAR:
+                ...
+          - pattern-inside: |
+              $ZIP = zipfile.ZipFile(...)
+              ...
+          - pattern-inside: |
+              with zipfile.ZipFile(...) as $ZIP:
+                ...
+      - pattern-not-inside: |
+          for $MEMBER in $TAR.getmembers():
+            ...
+            if $MEMBER.issym() or $MEMBER.islnk():
+              ...
+      - pattern-not-inside: |
+          for $MEMBER in ...:
+            ...
+            if $MEMBER.is_symlink():
+              ...
+    metadata:
+      category: security
+      subcategory: [vuln]
+      confidence: HIGH
+      likelihood: MEDIUM
+      impact: HIGH
+      pattern_class: traversal/symlink-follow
+      behavior: "Archive extraction without symlink filtering"
+      pattern_source: CVE-2025-8110
+      cwe: "CWE-59: Improper Link Resolution Before File Access"
+      owasp: "A01:2021 - Broken Access Control"
+      references:
+        - https://security.snyk.io/research/zip-slip-vulnerability
+        - https://cwe.mitre.org/data/definitions/59.html
+    message: >-
+      Archive extraction with extractall() without symlink filtering.
+      Malicious archives can contain symlinks pointing outside the
+      extraction directory. Fix: Iterate members and skip issym()/islnk(),
+      or use Python 3.12+ data_filter parameter.
+
+  # ---------------------------------------------------------------------------
+  # Go: Repository file write without symlink check (HIGH confidence)
+  # ---------------------------------------------------------------------------
+  - id: go-repo-write-no-symlink-check
+    languages: [go]
+    severity: ERROR
+    paths:
+      exclude:
+        - "**/test/**"
+        - "**/tests/**"
+        - "**/*_test.go"
+    patterns:
+      - pattern-either:
+          - pattern: os.WriteFile($PATH, ...)
+          - pattern: ioutil.WriteFile($PATH, ...)
+          - pattern: os.Create($PATH)
+      - pattern-inside: |
+          func ($R *Repository) $METHOD(...) {
+            ...
+          }
+      - pattern-not-inside: |
+          $INFO, $ERR := os.Lstat(...)
+          ...
+      - pattern-not-inside: |
+          $INFO, $ERR = os.Lstat(...)
+          ...
+      - pattern-not-inside: |
+          $REAL, $ERR := filepath.EvalSymlinks(...)
+          ...
+    metadata:
+      category: security
+      subcategory: [vuln]
+      confidence: HIGH
+      likelihood: HIGH
+      impact: HIGH
+      pattern_class: traversal/symlink-follow
+      behavior: "Git repository file write without symlink check"
+      pattern_source: CVE-2025-8110
+      cwe: "CWE-59: Improper Link Resolution Before File Access"
+      references:
+        - https://www.wiz.io/blog/wiz-research-gogs-cve-2025-8110-rce-exploit
+    message: >-
+      File write in Repository method without symlink check. Git repos
+      can contain attacker-controlled symlinks. Writing follows the symlink
+      to escape the repository. This is the CVE-2025-8110 pattern.
+      Fix: Use os.Lstat() to check for symlinks before writing.
+
+  # ---------------------------------------------------------------------------
+  # Go: File write after filepath.Join (AUDIT - needs manual review)
+  # ---------------------------------------------------------------------------
+  - id: go-write-after-join-audit
+    languages: [go]
+    severity: WARNING
+    paths:
+      exclude:
+        - "**/test/**"
+        - "**/tests/**"
+        - "**/*_test.go"
+        - "**/vendor/**"
+    patterns:
+      - pattern-either:
+          - pattern: os.WriteFile($PATH, ...)
+          - pattern: ioutil.WriteFile($PATH, ...)
+      - pattern-inside: |
+          $FULLPATH := filepath.Join($BASE, $USER)
+          ...
+      # Exclude Repository methods (covered by go-repo-write-no-symlink-check)
+      - pattern-not-inside: |
+          func ($R *Repository) $METHOD(...) {
+            ...
+          }
+      - pattern-not-inside: |
+          $INFO, $ERR := os.Lstat(...)
+          ...
+      - pattern-not-inside: |
+          $REAL, $ERR := filepath.EvalSymlinks(...)
+          ...
+    metadata:
+      category: security
+      subcategory: [audit]
+      confidence: LOW
+      likelihood: MEDIUM
+      impact: HIGH
+      pattern_class: traversal/symlink-follow
+      behavior: "File write after path join without symlink check"
+      pattern_source: CVE-2025-8110
+      cwe: "CWE-59: Improper Link Resolution Before File Access"
+      references:
+        - https://cwe.mitre.org/data/definitions/59.html
+    message: >-
+      [AUDIT] File write after filepath.Join without symlink check.
+      If user controls the path and a symlink exists, write escapes
+      the intended directory. VERIFY: Is user input involved?
+      Fix: Use os.Lstat() or filepath.EvalSymlinks() before writing.

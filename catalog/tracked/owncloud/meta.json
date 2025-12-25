@@ -1,0 +1,14 @@
+{
+  "name": "owncloud",
+  "platform": "hackerone",
+  "github_org": "owncloud",
+  "program_url": "https://hackerone.com/owncloud",
+  "scope": {
+    "in_scope": [],
+    "out_of_scope": []
+  },
+  "added_date": "2025-12-22",
+  "notes": "Program paused as of 2025-12-22. 3 medium-severity findings in ocis repo need investigation when reopened. See findings/owncloud/reports/future-research.md",
+  "status": "archived",
+  "archived_date": "2025-12-23"
+}

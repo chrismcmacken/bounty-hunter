@@ -1,0 +1,13 @@
+{
+  "name": "test-org-12345",
+  "platform": "other",
+  "github_org": "test-org-12345",
+  "program_url": "",
+  "scope": {
+    "in_scope": [],
+    "out_of_scope": []
+  },
+  "added_date": "2025-12-22",
+  "status": "active",
+  "notes": ""
+}

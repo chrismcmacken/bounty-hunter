@@ -1,0 +1,17 @@
+# Better JSON diffs - shows semantic changes instead of line-by-line
+*.json diff=json
+
+# Gzipped files are binary - don't try to diff them
+*.json.gz binary
+
+# Scan results should always be gzipped
+# These patterns help identify if someone accidentally commits uncompressed files
+catalog/tracked/*/scans/*/semgrep.json -diff
+catalog/tracked/*/scans/*/trufflehog.json -diff
+catalog/tracked/*/scans/*/kics.json -diff
+catalog/tracked/*/scans/*/artifacts.json -diff
+findings/*/semgrep-results/*.json -diff
+findings/*/trufflehog-results/*.json -diff
+findings/*/kics-results/*.json -diff
+findings/*/artifact-results/*.json -diff
+findings/*/inventory/*-sbom.json -diff

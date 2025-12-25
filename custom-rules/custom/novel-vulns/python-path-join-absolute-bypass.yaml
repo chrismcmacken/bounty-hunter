@@ -1,0 +1,193 @@
+rules:
+  - id: python-path-join-absolute-bypass
+    mode: taint
+    languages:
+      - python
+    message: |
+      User-controlled input flows to os.path.join() or pathlib joinpath/operator as a non-first argument.
+      Python's os.path.join() and pathlib.PurePath.joinpath() discard all preceding path components
+      when they encounter an absolute path (starting with '/').
+
+      Example: os.path.join("/safe/uploads", user_input)
+      Example: PurePath("/safe/uploads").joinpath(user_input)
+      Example: Path("/safe/uploads") / user_input
+      If user_input = "/etc/passwd", the result is "/etc/passwd" (not "/safe/uploads/etc/passwd").
+
+      This allows path traversal attacks to access arbitrary files outside the intended directory.
+
+      Remediation:
+      - Use os.path.basename() to strip directory components: os.path.join(base, os.path.basename(user_input))
+      - Strip leading slashes: os.path.join(base, user_input.lstrip('/'))
+      - Validate the final path starts with the base: assert resolved.startswith(os.path.realpath(base))
+      - Use werkzeug.utils.secure_filename() for uploaded file names
+    severity: ERROR
+    metadata:
+      cwe: "CWE-22"
+      owasp:
+        - "A01:2021-Broken Access Control"
+      category: security
+      confidence: HIGH
+      likelihood: HIGH
+      impact: HIGH
+      subcategory:
+        - vuln
+      author: "Bug Bounty Hunter"
+      created: "2025-01-15"
+      references:
+        - https://cwe.mitre.org/data/definitions/22.html
+        - https://docs.python.org/3/library/os.path.html#os.path.join
+        - https://www.yeswehack.com/learn-bug-bounty/training  # YesWeHack training reference
+
+    pattern-sources:
+      # Flask/Werkzeug
+      - pattern: request.args.get(...)
+      - pattern: request.args[...]
+      - pattern: request.form.get(...)
+      - pattern: request.form[...]
+      - pattern: request.files[...]
+      - pattern: request.json[...]
+      - pattern: request.data
+      - pattern: request.values.get(...)
+      - pattern: request.values[...]
+      - pattern: request.headers.get(...)
+      - pattern: request.cookies.get(...)
+
+      # Django
+      - pattern: request.GET.get(...)
+      - pattern: request.GET[...]
+      - pattern: request.POST.get(...)
+      - pattern: request.POST[...]
+      - pattern: request.FILES[...]
+      - pattern: request.data[...]
+
+      # FastAPI/Starlette
+      - pattern: await request.form()
+      - pattern: await request.json()
+      - pattern: await request.body()
+
+      # Generic input
+      - pattern: input(...)
+      - pattern: sys.argv[...]
+
+      # File uploads
+      - pattern: $FILE.filename
+
+    pattern-sinks:
+      # os.path.join with tainted data in non-first position
+      - pattern: os.path.join($BASE, $PATH, ...)
+        focus-metavariable: $PATH
+      - pattern: os.path.join($BASE, ..., $PATH)
+        focus-metavariable: $PATH
+
+      # pathlib.Path (concrete path class)
+      - pattern: pathlib.Path($BASE).joinpath($PATH, ...)
+        focus-metavariable: $PATH
+      - pattern: pathlib.Path($BASE) / $PATH
+        focus-metavariable: $PATH
+      - pattern: Path($BASE).joinpath($PATH, ...)
+        focus-metavariable: $PATH
+      - pattern: Path($BASE) / $PATH
+        focus-metavariable: $PATH
+
+      # pathlib.PurePath (abstract base class - same behavior)
+      - pattern: pathlib.PurePath($BASE).joinpath($PATH, ...)
+        focus-metavariable: $PATH
+      - pattern: pathlib.PurePath($BASE) / $PATH
+        focus-metavariable: $PATH
+      - pattern: PurePath($BASE).joinpath($PATH, ...)
+        focus-metavariable: $PATH
+      - pattern: PurePath($BASE) / $PATH
+        focus-metavariable: $PATH
+
+      # pathlib.PurePosixPath
+      - pattern: pathlib.PurePosixPath($BASE).joinpath($PATH, ...)
+        focus-metavariable: $PATH
+      - pattern: pathlib.PurePosixPath($BASE) / $PATH
+        focus-metavariable: $PATH
+      - pattern: PurePosixPath($BASE).joinpath($PATH, ...)
+        focus-metavariable: $PATH
+      - pattern: PurePosixPath($BASE) / $PATH
+        focus-metavariable: $PATH
+
+      # pathlib.PureWindowsPath
+      - pattern: pathlib.PureWindowsPath($BASE).joinpath($PATH, ...)
+        focus-metavariable: $PATH
+      - pattern: pathlib.PureWindowsPath($BASE) / $PATH
+        focus-metavariable: $PATH
+      - pattern: PureWindowsPath($BASE).joinpath($PATH, ...)
+        focus-metavariable: $PATH
+      - pattern: PureWindowsPath($BASE) / $PATH
+        focus-metavariable: $PATH
+
+      # pathlib.PosixPath and WindowsPath (concrete platform-specific)
+      - pattern: pathlib.PosixPath($BASE).joinpath($PATH, ...)
+        focus-metavariable: $PATH
+      - pattern: pathlib.PosixPath($BASE) / $PATH
+        focus-metavariable: $PATH
+      - pattern: PosixPath($BASE).joinpath($PATH, ...)
+        focus-metavariable: $PATH
+      - pattern: PosixPath($BASE) / $PATH
+        focus-metavariable: $PATH
+      - pattern: pathlib.WindowsPath($BASE).joinpath($PATH, ...)
+        focus-metavariable: $PATH
+      - pattern: pathlib.WindowsPath($BASE) / $PATH
+        focus-metavariable: $PATH
+      - pattern: WindowsPath($BASE).joinpath($PATH, ...)
+        focus-metavariable: $PATH
+      - pattern: WindowsPath($BASE) / $PATH
+        focus-metavariable: $PATH
+
+    pattern-sanitizers:
+      # Strip to filename only
+      - pattern: os.path.basename(...)
+
+      # Werkzeug secure filename
+      - pattern: secure_filename(...)
+      - pattern: werkzeug.utils.secure_filename(...)
+
+      # Strip leading slashes
+      - pattern: $X.lstrip("/")
+      - pattern: $X.lstrip('/')
+      - pattern: $X.strip("/")
+      - pattern: $X.strip('/')
+      - pattern: $X.removeprefix("/")
+      - pattern: $X.removeprefix('/')
+
+      # Regex substitution of slashes
+      - pattern: re.sub("^/+", "", ...)
+      - pattern: re.sub('^/+', '', ...)
+      - pattern: re.sub("/", "", ...)
+
+      # Type conversion (numbers can't be paths)
+      - pattern: int(...)
+      - pattern: float(...)
+
+      # NOTE: Early-return patterns like "if x.startswith('/'): return" are NOT
+      # detected as sanitizers because semgrep doesn't do path-sensitive analysis.
+      # These will be false positives that require manual review.
+
+  # Additional pattern-based rule for dangerous direct concatenation
+  - id: python-path-join-user-input-first-arg
+    languages:
+      - python
+    message: |
+      User-controlled input is used as the first argument to os.path.join().
+      This gives the attacker complete control over the resulting path, as
+      subsequent arguments only append to the attacker-controlled base.
+
+      Remediation: Never use user input as the first (base) argument to os.path.join().
+    severity: ERROR
+    metadata:
+      cwe: "CWE-22"
+      owasp:
+        - "A01:2021-Broken Access Control"
+      category: security
+      confidence: HIGH
+      author: "Bug Bounty Hunter"
+    patterns:
+      - pattern-either:
+          - pattern: os.path.join(request.$METHOD.get(...), ...)
+          - pattern: os.path.join(request.$METHOD[...], ...)
+          - pattern: os.path.join($FILE.filename, ...)
+          - pattern: os.path.join(sys.argv[$N], ...)
+          - pattern: os.path.join(input(...), ...)

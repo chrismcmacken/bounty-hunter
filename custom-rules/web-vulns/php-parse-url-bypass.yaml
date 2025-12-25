@@ -1,0 +1,168 @@
+rules:
+  # =============================================================================
+  # PHP parse_url() Bypass Detection
+  # =============================================================================
+  # parse_url() returns FALSE for malformed URLs (e.g., port with leading zeros
+  # like :000443). Attackers can exploit this to bypass URL validation when:
+  # 1. Code doesn't check for false before accessing parsed components
+  # 2. Code falls back to using the original URL when parse_url fails
+  #
+  # Reference: https://www.php.net/manual/en/function.parse-url.php
+  # "Seriously malformed URLs, parse_url() may return false"
+  # =============================================================================
+
+  # ---------------------------------------------------------------------------
+  # Pattern 1: parse_url result used without false check
+  # ---------------------------------------------------------------------------
+  - id: php-parse-url-no-false-check
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [vuln]
+      confidence: MEDIUM
+      likelihood: MEDIUM
+      impact: HIGH
+      cwe: "CWE-20: Improper Input Validation"
+      references:
+        - https://www.php.net/manual/en/function.parse-url.php
+        - https://portswigger.net/research/server-side-request-forgery-ssrf
+    message: >-
+      parse_url() result is accessed without checking for false. parse_url returns
+      false for malformed URLs (e.g., http://evil.com:000443/). An attacker can
+      use this to bypass URL validation. Always check: if ($parsed === false) { ... }
+    languages: [php]
+    severity: WARNING
+    patterns:
+      - pattern-either:
+          # Direct array access on parse_url result
+          - pattern: parse_url($URL)[$KEY]
+          - pattern: parse_url($URL)['host']
+          - pattern: parse_url($URL)['scheme']
+          - pattern: parse_url($URL)['port']
+          - pattern: parse_url($URL)['path']
+      - pattern-not-inside: |
+          if (parse_url($URL) === false) { ... }
+      - pattern-not-inside: |
+          if (parse_url($URL) !== false) { ... }
+      - pattern-not-inside: |
+          if (!parse_url($URL)) { ... }
+      - pattern-not-inside: |
+          if (($PARSED = parse_url($URL)) !== false) { ... }
+
+  # ---------------------------------------------------------------------------
+  # Pattern 2: SSRF via parse_url bypass - validation skipped on false
+  # ---------------------------------------------------------------------------
+  - id: php-parse-url-ssrf-bypass
+    mode: taint
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [vuln]
+      confidence: HIGH
+      likelihood: MEDIUM
+      impact: HIGH
+      cwe: "CWE-918: Server-Side Request Forgery (SSRF)"
+      references:
+        - https://www.php.net/manual/en/function.parse-url.php
+        - https://blog.orange.tw/2017/07/how-i-chained-4-vulnerabilities-on.html
+    message: >-
+      User-controlled URL is passed to HTTP functions after parse_url validation
+      that may be bypassed. If parse_url returns false (e.g., for :000443 port),
+      the original URL may still be passed to curl/file_get_contents which parse
+      it differently. Use filter_var($url, FILTER_VALIDATE_URL) as additional check.
+    languages: [php]
+    severity: ERROR
+    pattern-sources:
+      - pattern: $_GET[...]
+      - pattern: $_POST[...]
+      - pattern: $_REQUEST[...]
+      - pattern: $request->input(...)
+      - pattern: $request->get(...)
+    pattern-sinks:
+      - pattern: curl_setopt($CH, CURLOPT_URL, $URL)
+      - pattern: curl_init($URL)
+      - pattern: file_get_contents($URL, ...)
+      - pattern: fopen($URL, ...)
+      - pattern: $client->get($URL, ...)
+      - pattern: $client->request($METHOD, $URL, ...)
+
+  # ---------------------------------------------------------------------------
+  # Pattern 3: Unsafe null coalesce fallback to original URL
+  # ---------------------------------------------------------------------------
+  - id: php-parse-url-unsafe-fallback
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [vuln]
+      confidence: HIGH
+      likelihood: MEDIUM
+      impact: HIGH
+      cwe: "CWE-636: Not Failing Securely"
+    message: >-
+      When parse_url returns false or key is missing, code falls back to using
+      the original URL. Attackers can trigger this with malformed URLs (e.g.,
+      :000443 port) to bypass host validation. Reject the URL entirely when
+      parse_url fails instead of using fallback.
+    languages: [php]
+    severity: ERROR
+    patterns:
+      - pattern-either:
+          # Ternary with fallback to original URL
+          - pattern: parse_url($URL)['host'] ?? $URL
+          - pattern: parse_url($URL)['scheme'] ?? $URL
+          - pattern: parse_url($URL, PHP_URL_HOST) ?? $URL
+          - pattern: parse_url($URL, PHP_URL_SCHEME) ?? $URL
+          # Common variable pattern
+          - pattern: $PARSED['host'] ?? $URL
+          - pattern: $PARSED['scheme'] ?? $URL
+
+  # ---------------------------------------------------------------------------
+  # Pattern 4: Host extraction for allowlist check (audit)
+  # ---------------------------------------------------------------------------
+  - id: php-parse-url-host-extraction-audit
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [audit]
+      confidence: MEDIUM
+      likelihood: MEDIUM
+      impact: MEDIUM
+      cwe: "CWE-20: Improper Input Validation"
+    message: >-
+      parse_url used for host extraction. Verify that false return value is
+      handled - parse_url returns false for malformed URLs like http://evil.com:000443/
+      which other parsers (curl, browsers) accept. Consider adding filter_var()
+      validation: filter_var($url, FILTER_VALIDATE_URL)
+    languages: [php]
+    severity: WARNING
+    pattern-either:
+      - pattern: parse_url($URL, PHP_URL_HOST)
+      - pattern: parse_url($URL, PHP_URL_SCHEME)
+
+  # ---------------------------------------------------------------------------
+  # Pattern 5: Audit - parse_url with user input (lower confidence)
+  # ---------------------------------------------------------------------------
+  - id: php-parse-url-user-input-audit
+    mode: taint
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [audit]
+      confidence: LOW
+      likelihood: MEDIUM
+      impact: MEDIUM
+      cwe: "CWE-20: Improper Input Validation"
+    message: >-
+      parse_url called with user-controlled input. Review to ensure false return
+      value is handled securely. Malformed URLs (e.g., :000443 port) return false
+      but may be valid for other parsers (curl, browsers).
+    languages: [php]
+    severity: INFO
+    pattern-sources:
+      - pattern: $_GET[...]
+      - pattern: $_POST[...]
+      - pattern: $_REQUEST[...]
+      - pattern: $request->input(...)
+    pattern-sinks:
+      - pattern: parse_url($URL)
+      - pattern: parse_url($URL, ...)

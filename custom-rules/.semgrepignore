@@ -1,0 +1,21 @@
+# Semgrepignore for custom-rules directory
+# Exclude test code and node_modules that aren't Semgrep rules
+
+# Node.js modules
+**/node_modules/**
+
+# Test/example vulnerable code (not rules)
+**/test-vulnerable-libs/**
+**/test-vulnerable/**
+**/vulnerable-samples/**
+
+# CI/CD configs (not Semgrep rules)
+**/.github/**
+**/.travis.yml
+**/.gitlab-ci.yml
+**/.circleci/**
+
+# Documentation
+**/*.md
+**/README*
+**/LICENSE*

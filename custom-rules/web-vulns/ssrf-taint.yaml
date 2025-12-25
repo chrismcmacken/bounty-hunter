@@ -1,0 +1,383 @@
+rules:
+  # =============================================================================
+  # SSRF Detection Rules - Taint Mode
+  # =============================================================================
+  # These rules track user-controlled input flowing to HTTP request functions.
+  # Requires: semgrep --pro for cross-file analysis (recommended)
+  #
+  # NOTE: p/default already includes basic SSRF patterns. These rules add:
+  # - Framework-specific sources (Flask, Django, Express, etc.)
+  # - Additional HTTP libraries
+  # - CVE-specific patterns
+  # =============================================================================
+
+  # ---------------------------------------------------------------------------
+  # Python SSRF (Flask/Django → requests/urllib/httpx)
+  # ---------------------------------------------------------------------------
+  - id: python-ssrf-requests
+    mode: taint
+    paths:
+      exclude:
+        - "**/node_modules/**"
+        - "**/vendor/**"
+        - "**/dist/**"
+        - "**/build/**"
+        - "**/*.min.js"
+        - "**/*.min.mjs"
+        - "**/*.bundle.js"
+        - "**/*.chunk.js"
+        - "**/*.chunk.mjs"
+        - "**/*-init.mjs"
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [vuln]
+      confidence: HIGH
+      likelihood: MEDIUM
+      impact: HIGH
+      cwe: "CWE-918: Server-Side Request Forgery (SSRF)"
+      owasp: "A10:2021 - Server-Side Request Forgery"
+      references:
+        - https://owasp.org/www-community/attacks/Server_Side_Request_Forgery
+    message: >-
+      User-controlled input flows to an HTTP request. This could allow SSRF attacks
+      where an attacker makes the server request internal resources or external services.
+      Validate URLs against an allowlist of permitted hosts and schemes.
+    languages: [python]
+    severity: ERROR
+    pattern-sources:
+      # Flask sources
+      - pattern: request.args.get(...)
+      - pattern: request.args[...]
+      - pattern: request.form.get(...)
+      - pattern: request.form[...]
+      - pattern: request.json.get(...)
+      - pattern: request.json[...]
+      - pattern: request.data
+      - pattern: request.values.get(...)
+      - pattern: request.values[...]
+      # Django sources
+      - pattern: request.GET.get(...)
+      - pattern: request.GET[...]
+      - pattern: request.POST.get(...)
+      - pattern: request.POST[...]
+      - pattern: request.body
+    pattern-sinks:
+      # requests library
+      - pattern: requests.get($URL, ...)
+      - pattern: requests.post($URL, ...)
+      - pattern: requests.put($URL, ...)
+      - pattern: requests.delete($URL, ...)
+      - pattern: requests.patch($URL, ...)
+      - pattern: requests.head($URL, ...)
+      - pattern: requests.options($URL, ...)
+      - pattern: requests.request($METHOD, $URL, ...)
+      # urllib
+      - pattern: urllib.request.urlopen($URL, ...)
+      - pattern: urlopen($URL, ...)
+      # httpx
+      - pattern: httpx.get($URL, ...)
+      - pattern: httpx.post($URL, ...)
+      - pattern: httpx.AsyncClient(...).get($URL, ...)
+      # aiohttp
+      - pattern: aiohttp.ClientSession(...).get($URL, ...)
+    pattern-sanitizers:
+      # URL parsing functions - indicates developer is validating
+      - pattern: urlparse($URL)
+      - pattern: urllib.parse.urlparse($URL)
+      - pattern: urllib.parse.urlsplit($URL)
+
+  # ---------------------------------------------------------------------------
+  # JavaScript/Node.js SSRF (Express → axios/fetch/http)
+  # ---------------------------------------------------------------------------
+  - id: nodejs-ssrf-axios
+    mode: taint
+    paths:
+      exclude:
+        - "**/node_modules/**"
+        - "**/vendor/**"
+        - "**/dist/**"
+        - "**/build/**"
+        - "**/*.min.js"
+        - "**/*.min.mjs"
+        - "**/*.bundle.js"
+        - "**/*.chunk.js"
+        - "**/*.chunk.mjs"
+        - "**/*-init.mjs"
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [vuln]
+      confidence: HIGH
+      likelihood: MEDIUM
+      impact: HIGH
+      cwe: "CWE-918: Server-Side Request Forgery (SSRF)"
+      cve: CVE-2024-39338
+      references:
+        - https://www.invicti.com/web-application-vulnerabilities/axios-server-side-request-forgery-ssrf-vulnerability-cve-2024-39338
+    message: >-
+      User-controlled input flows to an HTTP request via axios. See CVE-2024-39338
+      for axios-specific SSRF via path-relative URL handling. Validate URLs against
+      an allowlist before making requests.
+    languages: [javascript, typescript]
+    severity: ERROR
+    pattern-sources:
+      # Express sources
+      - pattern: req.body.$PARAM
+      - pattern: req.query.$PARAM
+      - pattern: req.params.$PARAM
+      - pattern: req.headers.$PARAM
+      # Direct access
+      - pattern: req.body[...]
+      - pattern: req.query[...]
+      - pattern: req.params[...]
+    pattern-sinks:
+      # axios
+      - pattern: axios.get($URL, ...)
+      - pattern: axios.post($URL, ...)
+      - pattern: axios.put($URL, ...)
+      - pattern: axios.delete($URL, ...)
+      - pattern: axios.patch($URL, ...)
+      - pattern: "axios.request({url: $URL, ...})"
+      - pattern: "axios({url: $URL, ...})"
+    pattern-sanitizers:
+      - pattern: new URL($URL).hostname
+
+  - id: nodejs-ssrf-fetch
+    mode: taint
+    paths:
+      exclude:
+        - "**/node_modules/**"
+        - "**/vendor/**"
+        - "**/dist/**"
+        - "**/build/**"
+        - "**/*.min.js"
+        - "**/*.min.mjs"
+        - "**/*.bundle.js"
+        - "**/*.chunk.js"
+        - "**/*.chunk.mjs"
+        - "**/*-init.mjs"
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [vuln]
+      confidence: HIGH
+      likelihood: MEDIUM
+      impact: HIGH
+      cwe: "CWE-918: Server-Side Request Forgery (SSRF)"
+    message: >-
+      User-controlled input flows to fetch(). This could allow SSRF attacks.
+      Validate URLs against an allowlist before making requests.
+    languages: [javascript, typescript]
+    severity: ERROR
+    pattern-sources:
+      - pattern: req.body.$PARAM
+      - pattern: req.query.$PARAM
+      - pattern: req.params.$PARAM
+      - pattern: req.body[...]
+      - pattern: req.query[...]
+    pattern-sinks:
+      - pattern: fetch($URL, ...)
+      - pattern: fetch($URL)
+    pattern-sanitizers:
+      - pattern: new URL($URL).hostname
+
+  # ---------------------------------------------------------------------------
+  # Java SSRF (Spring → HttpClient/RestTemplate)
+  # ---------------------------------------------------------------------------
+  - id: java-ssrf-spring
+    mode: taint
+    paths:
+      exclude:
+        - "**/node_modules/**"
+        - "**/vendor/**"
+        - "**/dist/**"
+        - "**/build/**"
+        - "**/*.min.js"
+        - "**/*.min.mjs"
+        - "**/*.bundle.js"
+        - "**/*.chunk.js"
+        - "**/*.chunk.mjs"
+        - "**/*-init.mjs"
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [vuln]
+      confidence: HIGH
+      likelihood: MEDIUM
+      impact: HIGH
+      cwe: "CWE-918: Server-Side Request Forgery (SSRF)"
+      cve: CVE-2024-22259
+      references:
+        - https://socradar.io/blog/critical-update-for-spring-framework-ssrf-attacks/
+    message: >-
+      User-controlled input flows to an HTTP request. See CVE-2024-22259 for
+      Spring UriComponentsBuilder bypass. Validate URLs against an allowlist.
+    languages: [java]
+    severity: ERROR
+    pattern-sources:
+      # Spring MVC sources
+      - pattern: "@RequestParam(...) String $PARAM"
+      - pattern: "@PathVariable(...) String $PARAM"
+      - pattern: "@RequestBody $TYPE $PARAM"
+      - pattern: request.getParameter(...)
+      - pattern: request.getHeader(...)
+    pattern-sinks:
+      # RestTemplate
+      - pattern: restTemplate.getForObject($URL, ...)
+      - pattern: restTemplate.getForEntity($URL, ...)
+      - pattern: restTemplate.postForObject($URL, ...)
+      - pattern: restTemplate.exchange($URL, ...)
+      # WebClient
+      - pattern: webClient.get().uri($URL)
+      - pattern: webClient.post().uri($URL)
+      # UriComponentsBuilder (CVE-2024-22259)
+      - pattern: UriComponentsBuilder.fromUriString($URL)
+      - pattern: UriComponentsBuilder.fromHttpUrl($URL)
+      # HttpURLConnection
+      - pattern: new URL($URL).openConnection()
+      - pattern: (HttpURLConnection) new URL($URL).openConnection()
+    pattern-sanitizers:
+      - pattern: new URI($URL).getHost()
+
+  # ---------------------------------------------------------------------------
+  # Go SSRF
+  # ---------------------------------------------------------------------------
+  - id: go-ssrf-http
+    mode: taint
+    paths:
+      exclude:
+        - "**/node_modules/**"
+        - "**/vendor/**"
+        - "**/dist/**"
+        - "**/build/**"
+        - "**/*.min.js"
+        - "**/*.min.mjs"
+        - "**/*.bundle.js"
+        - "**/*.chunk.js"
+        - "**/*.chunk.mjs"
+        - "**/*-init.mjs"
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [vuln]
+      confidence: HIGH
+      likelihood: MEDIUM
+      impact: HIGH
+      cwe: "CWE-918: Server-Side Request Forgery (SSRF)"
+    message: >-
+      User-controlled input flows to an HTTP request. Validate URLs against
+      an allowlist before making requests.
+    languages: [go]
+    severity: ERROR
+    pattern-sources:
+      # Gin framework
+      - pattern: c.Query(...)
+      - pattern: c.Param(...)
+      - pattern: c.PostForm(...)
+      # Standard http
+      - pattern: r.URL.Query().Get(...)
+      - pattern: r.FormValue(...)
+      - pattern: r.PostFormValue(...)
+    pattern-sinks:
+      - pattern: http.Get($URL)
+      - pattern: http.Post($URL, ...)
+      - pattern: http.NewRequest($METHOD, $URL, ...)
+      - pattern: client.Get($URL)
+      # Note: client.Do($REQ) removed - requires intermediate taint propagation
+      # that semgrep can't track without cross-function analysis
+
+  # ---------------------------------------------------------------------------
+  # Ruby SSRF
+  # ---------------------------------------------------------------------------
+  - id: ruby-ssrf-http
+    mode: taint
+    paths:
+      exclude:
+        - "**/node_modules/**"
+        - "**/vendor/**"
+        - "**/dist/**"
+        - "**/build/**"
+        - "**/*.min.js"
+        - "**/*.min.mjs"
+        - "**/*.bundle.js"
+        - "**/*.chunk.js"
+        - "**/*.chunk.mjs"
+        - "**/*-init.mjs"
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [vuln]
+      confidence: HIGH
+      likelihood: MEDIUM
+      impact: HIGH
+      cwe: "CWE-918: Server-Side Request Forgery (SSRF)"
+    message: >-
+      User-controlled input flows to an HTTP request. Validate URLs against
+      an allowlist before making requests.
+    languages: [ruby]
+    severity: ERROR
+    pattern-sources:
+      # Rails sources
+      - pattern: params[...]
+      - pattern: params.fetch(...)
+      - pattern: request.params[...]
+    pattern-sinks:
+      # Net::HTTP
+      - pattern: Net::HTTP.get(URI($URL))
+      - pattern: Net::HTTP.get_response(URI($URL))
+      # open-uri (URI.open is the modern API)
+      - pattern: URI.open($URL)
+      - pattern: OpenURI.open_uri($URL)
+      # HTTParty
+      - pattern: HTTParty.get($URL, ...)
+      - pattern: HTTParty.post($URL, ...)
+      # Faraday
+      - pattern: Faraday.get($URL, ...)
+
+  # ---------------------------------------------------------------------------
+  # PHP SSRF
+  # ---------------------------------------------------------------------------
+  - id: php-ssrf-curl
+    mode: taint
+    paths:
+      exclude:
+        - "**/node_modules/**"
+        - "**/vendor/**"
+        - "**/dist/**"
+        - "**/build/**"
+        - "**/*.min.js"
+        - "**/*.min.mjs"
+        - "**/*.bundle.js"
+        - "**/*.chunk.js"
+        - "**/*.chunk.mjs"
+        - "**/*-init.mjs"
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [vuln]
+      confidence: HIGH
+      likelihood: MEDIUM
+      impact: HIGH
+      cwe: "CWE-918: Server-Side Request Forgery (SSRF)"
+    message: >-
+      User-controlled input flows to an HTTP request via cURL or file_get_contents.
+      Validate URLs against an allowlist before making requests.
+    languages: [php]
+    severity: ERROR
+    pattern-sources:
+      - pattern: $_GET[...]
+      - pattern: $_POST[...]
+      - pattern: $_REQUEST[...]
+      - pattern: $request->input(...)
+      - pattern: $request->get(...)
+    pattern-sinks:
+      # cURL
+      - pattern: curl_setopt($CH, CURLOPT_URL, $URL)
+      - pattern: curl_init($URL)
+      # file_get_contents
+      - pattern: file_get_contents($URL, ...)
+      # Guzzle
+      - pattern: $client->get($URL, ...)
+      - pattern: $client->post($URL, ...)
+      - pattern: $client->request($METHOD, $URL, ...)

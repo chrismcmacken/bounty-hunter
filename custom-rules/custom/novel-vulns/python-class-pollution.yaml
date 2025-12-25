@@ -1,0 +1,338 @@
+rules:
+  # =============================================================================
+  # Python Class Pollution (Prototype Pollution Equivalent)
+  # =============================================================================
+  # Python's mutable class attributes enable "class pollution" attacks similar
+  # to JavaScript prototype pollution. When untrusted input can modify class
+  # attributes (via setattr, recursive merge, or deserialization), attackers can:
+  # - Overwrite global variables via __init__.__globals__
+  # - Modify class behavior affecting all instances
+  # - Escalate to RCE via __reduce__, __getattr__, etc.
+  #
+  # References:
+  # - https://blog.abdulrah33m.com/prototype-pollution-in-python/
+  # - https://book.hacktricks.wiki/en/generic-methodologies-and-resources/python/class-pollution-pythons-prototype-pollution.html
+  # =============================================================================
+
+  # ---------------------------------------------------------------------------
+  # TAINT MODE: User input → setattr sink (HIGH confidence)
+  # ---------------------------------------------------------------------------
+  - id: python-class-pollution-setattr-taint
+    mode: taint
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [vuln]
+      confidence: HIGH
+      likelihood: HIGH
+      impact: HIGH
+      cwe: "CWE-915: Improperly Controlled Modification of Dynamically-Determined Object Attributes"
+      owasp: "A03:2021 - Injection"
+      references:
+        - https://blog.abdulrah33m.com/prototype-pollution-in-python/
+        - https://book.hacktricks.wiki/en/generic-methodologies-and-resources/python/class-pollution-pythons-prototype-pollution.html
+    message: >-
+      User-controlled input flows to setattr(), allowing class pollution.
+      Attackers can traverse __init__.__globals__ to overwrite global variables,
+      modify class attributes affecting all instances, or achieve RCE.
+      Validate attribute names against an allowlist before using setattr().
+    languages: [python]
+    severity: ERROR
+    pattern-sources:
+      # Flask
+      - pattern: request.args.get(...)
+      - pattern: request.args[...]
+      - pattern: request.form.get(...)
+      - pattern: request.form[...]
+      - pattern: request.json
+      - pattern: request.data
+      - pattern: request.get_json(...)
+      # Django
+      - pattern: request.GET.get(...)
+      - pattern: request.GET[...]
+      - pattern: request.POST.get(...)
+      - pattern: request.POST[...]
+      - pattern: request.body
+      # FastAPI
+      - pattern: await request.body()
+      - pattern: await request.json()
+      # Generic input
+      - pattern: json.loads(...)
+      - pattern: json.load(...)
+      - pattern: yaml.load(...)
+      - pattern: yaml.safe_load(...)
+      # Socket/network input
+      - pattern: $SOCKET.recv(...)
+      - pattern: $SOCKET.recvfrom(...)
+    pattern-sinks:
+      - pattern: setattr($OBJ, $ATTR, $VAL)
+    pattern-sanitizers:
+      # Allowlist checks
+      - pattern: |
+          if $ATTR in $ALLOWED:
+              ...
+      - pattern: |
+          if $ATTR not in $BLOCKED:
+              ...
+
+  # ---------------------------------------------------------------------------
+  # Recursive merge with setattr - Classic pollution pattern
+  # ---------------------------------------------------------------------------
+  - id: python-class-pollution-recursive-merge
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [vuln]
+      confidence: HIGH
+      likelihood: HIGH
+      impact: HIGH
+      cwe: "CWE-915: Improperly Controlled Modification of Dynamically-Determined Object Attributes"
+      references:
+        - https://blog.abdulrah33m.com/prototype-pollution-in-python/
+    message: >-
+      Recursive merge function uses setattr() with getattr() traversal,
+      enabling class pollution attacks. Attackers can use payloads like
+      {"__init__": {"__globals__": {"var": "polluted"}}} to modify globals.
+      Add blocklist for dunder attributes or use a safe merge implementation.
+    languages: [python]
+    severity: ERROR
+    patterns:
+      - pattern-either:
+          # Pattern: getattr in condition, setattr in body
+          - pattern: |
+              def $FUNC(...):
+                  ...
+                  getattr($DST, $KEY)
+                  ...
+                  setattr($DST, $KEY, $VAL)
+                  ...
+          # Pattern: hasattr check with setattr
+          - pattern: |
+              def $FUNC(...):
+                  ...
+                  hasattr($DST, $KEY)
+                  ...
+                  setattr($DST, $KEY, $VAL)
+                  ...
+          # Pattern: recursive call with getattr/setattr
+          - pattern: |
+              def $FUNC($SRC, $DST):
+                  ...
+                  $FUNC($VAL, getattr($DST, $KEY))
+                  ...
+                  setattr($DST, $KEY, ...)
+                  ...
+
+  # ---------------------------------------------------------------------------
+  # Direct __globals__ access - Immediate pollution indicator
+  # ---------------------------------------------------------------------------
+  - id: python-class-pollution-globals-access
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [vuln]
+      confidence: HIGH
+      likelihood: HIGH
+      impact: HIGH
+      cwe: "CWE-915: Improperly Controlled Modification of Dynamically-Determined Object Attributes"
+      references:
+        - https://blog.abdulrah33m.com/prototype-pollution-in-python/
+    message: >-
+      Direct access to __globals__ through attribute traversal detected.
+      This enables modification of global variables and can lead to RCE.
+      Review if this traversal is necessary and if input is properly validated.
+    languages: [python]
+    severity: ERROR
+    pattern-either:
+      # Direct __globals__ access patterns
+      - pattern: $OBJ.__init__.__globals__
+      - pattern: getattr($OBJ, "__init__").__globals__
+      - pattern: getattr(getattr($OBJ, "__init__"), "__globals__")
+      - pattern: $OBJ.__class__.__init__.__globals__
+      # setattr on __globals__
+      - pattern: setattr($OBJ.__init__, "__globals__", ...)
+      - pattern: $OBJ.__init__.__globals__[$KEY] = ...
+      - pattern: $OBJ.__init__.__globals__.update(...)
+
+  # ---------------------------------------------------------------------------
+  # __class__ manipulation - Class attribute pollution
+  # ---------------------------------------------------------------------------
+  - id: python-class-pollution-class-manipulation
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [vuln]
+      confidence: MEDIUM
+      likelihood: MEDIUM
+      impact: HIGH
+      cwe: "CWE-915: Improperly Controlled Modification of Dynamically-Determined Object Attributes"
+    message: >-
+      Modification of __class__ or __bases__ detected. This can affect all
+      instances of a class and enable privilege escalation. Ensure this is
+      not reachable from untrusted input.
+    languages: [python]
+    severity: WARNING
+    pattern-either:
+      - pattern: $OBJ.__class__ = ...
+      - pattern: setattr($OBJ, "__class__", ...)
+      - pattern: $OBJ.__class__.__bases__ = ...
+      - pattern: $OBJ.__class__.__dict__[$KEY] = ...
+      - pattern: setattr($OBJ.__class__, $ATTR, $VAL)
+
+  # ---------------------------------------------------------------------------
+  # Dangerous dunder attribute in setattr - Audit pattern
+  # ---------------------------------------------------------------------------
+  - id: python-class-pollution-dunder-setattr
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [audit]
+      confidence: MEDIUM
+      likelihood: MEDIUM
+      impact: HIGH
+      cwe: "CWE-915: Improperly Controlled Modification of Dynamically-Determined Object Attributes"
+    message: >-
+      setattr() called with a dunder attribute name. While sometimes legitimate,
+      this pattern can enable class pollution if the attribute name or object
+      is influenced by user input. Review the data flow carefully.
+    languages: [python]
+    severity: WARNING
+    patterns:
+      - pattern-either:
+          - pattern: setattr($OBJ, "__init__", ...)
+          - pattern: setattr($OBJ, "__class__", ...)
+          - pattern: setattr($OBJ, "__dict__", ...)
+          - pattern: setattr($OBJ, "__bases__", ...)
+          - pattern: setattr($OBJ, "__globals__", ...)
+          - pattern: setattr($OBJ, "__reduce__", ...)
+          - pattern: setattr($OBJ, "__getattr__", ...)
+          - pattern: setattr($OBJ, "__setattr__", ...)
+
+  # ---------------------------------------------------------------------------
+  # Unsafe object_hook in json.loads - Deserialization pollution
+  # ---------------------------------------------------------------------------
+  - id: python-class-pollution-json-object-hook
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [vuln]
+      confidence: MEDIUM
+      likelihood: MEDIUM
+      impact: HIGH
+      cwe: "CWE-915: Improperly Controlled Modification of Dynamically-Determined Object Attributes"
+    message: >-
+      json.loads() with object_hook that uses setattr may enable class pollution.
+      Attackers can craft JSON payloads to set arbitrary attributes on objects.
+      Ensure attribute names are validated against an allowlist.
+    languages: [python]
+    severity: WARNING
+    patterns:
+      - pattern-inside: |
+          def $HOOK($DICT):
+              ...
+              setattr($OBJ, $KEY, $VAL)
+              ...
+      - pattern: json.loads(..., object_hook=$HOOK)
+
+  # ---------------------------------------------------------------------------
+  # Pydantic/attrs model_validate with arbitrary input
+  # ---------------------------------------------------------------------------
+  - id: python-class-pollution-pydantic-extra
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [audit]
+      confidence: LOW
+      likelihood: LOW
+      impact: MEDIUM
+      cwe: "CWE-915: Improperly Controlled Modification of Dynamically-Determined Object Attributes"
+    message: >-
+      Pydantic model with extra='allow' accepts arbitrary fields which are
+      set as attributes. If combined with attribute traversal logic, this
+      could enable class pollution. Consider using extra='forbid' or
+      validate field names explicitly.
+    languages: [python]
+    severity: INFO
+    pattern-either:
+      - pattern: |
+          class $MODEL(...):
+              class Config:
+                  extra = "allow"
+      - pattern: |
+          class $MODEL(...):
+              model_config = ConfigDict(extra="allow")
+
+  # ---------------------------------------------------------------------------
+  # merge/update function with dict iteration - Common vulnerable pattern
+  # ---------------------------------------------------------------------------
+  - id: python-class-pollution-dict-merge
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [audit]
+      confidence: MEDIUM
+      likelihood: MEDIUM
+      impact: HIGH
+      cwe: "CWE-915: Improperly Controlled Modification of Dynamically-Determined Object Attributes"
+    message: >-
+      Dictionary merge function iterates over keys and uses setattr.
+      This pattern is commonly vulnerable to class pollution when the source
+      dictionary comes from untrusted input. Add blocklist for dunder keys
+      or validate against an explicit allowlist.
+    languages: [python]
+    severity: WARNING
+    patterns:
+      - pattern: |
+          for $KEY, $VAL in $SRC.items():
+              ...
+              setattr($DST, $KEY, ...)
+
+  # ---------------------------------------------------------------------------
+  # vars() or __dict__ update from untrusted source
+  # ---------------------------------------------------------------------------
+  - id: python-class-pollution-dict-update
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [vuln]
+      confidence: MEDIUM
+      likelihood: MEDIUM
+      impact: HIGH
+      cwe: "CWE-915: Improperly Controlled Modification of Dynamically-Determined Object Attributes"
+    message: >-
+      Object __dict__ or vars() is updated from external data. This can
+      enable mass assignment and class pollution attacks. Validate input
+      keys against an allowlist before updating object attributes.
+    languages: [python]
+    severity: WARNING
+    pattern-either:
+      - pattern: $OBJ.__dict__.update($DATA)
+      - pattern: vars($OBJ).update($DATA)
+      - pattern: $OBJ.__dict__ = $DATA
+      - pattern: $OBJ.__dict__ |= $DATA
+
+  # ---------------------------------------------------------------------------
+  # copy.deepcopy with __reduce__ - Potential gadget chain
+  # ---------------------------------------------------------------------------
+  - id: python-class-pollution-reduce-override
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [audit]
+      confidence: LOW
+      likelihood: LOW
+      impact: HIGH
+      cwe: "CWE-502: Deserialization of Untrusted Data"
+    message: >-
+      Custom __reduce__ or __reduce_ex__ method defined. These methods control
+      pickling behavior and can be exploited if an attacker can influence
+      object state through class pollution. Review for potential RCE chains.
+    languages: [python]
+    severity: INFO
+    pattern-either:
+      - pattern: |
+          def __reduce__(self):
+              ...
+      - pattern: |
+          def __reduce_ex__(self, $PROTO):
+              ...

@@ -1,0 +1,673 @@
+rules:
+  # =============================================================================
+  # Prototype Pollution to RCE
+  # =============================================================================
+  # Behavioral pattern: Server-side prototype pollution via unsafe object
+  # operations leading to Remote Code Execution.
+  #
+  # This pattern was discovered via CVE-2025-55182 (React2Shell) but applies to:
+  # - Any deep merge/extend function without hasOwnProperty checks
+  # - for...in loops that don't filter inherited properties
+  # - Object spread/assign with user-controlled input
+  # - Query/config parsers that build NESTED objects from untrusted keys
+  #
+  # The dangerous behavior is: User controls object KEYS that pollute
+  # Object.prototype, which then propagates to dangerous sinks (child_process,
+  # eval, template engines).
+  #
+  # PATH EXCLUSIONS: Bundled/minified files are excluded - they're library code
+  # and should be tracked via SCA, not SAST.
+  #
+  # TUNING NOTES (2025-12-24):
+  # - Added extensive bundled file exclusions after high FP rate on nextcloud
+  # - query-parser rule now requires bracket notation (nested object creation)
+  # - Simple key=value parsers (result[key] = value) are NOT vulnerable
+  # - Server response iteration is excluded (not user input)
+  # =============================================================================
+
+  # ---------------------------------------------------------------------------
+  # Rule 1: Unsafe deep merge/extend function (recursive assignment)
+  # ---------------------------------------------------------------------------
+  # Detects the classic vulnerable pattern in custom merge utilities.
+  # REQUIRES: Function name suggests merge/extend/assign/deep operation.
+  # This reduces FPs from generic for...in loops that aren't merge functions.
+  - id: prototype-pollution-deep-merge
+    paths:
+      exclude:
+        # Package managers and dependencies
+        - "**/node_modules/**"
+        - "**/vendor/**"
+        - "**/bower_components/**"
+        # Build outputs
+        - "**/dist/**"
+        - "**/build/**"
+        - "**/out/**"
+        - "**/.next/**"
+        - "**/.nuxt/**"
+        # Minified and bundled files
+        - "**/*.min.js"
+        - "**/*.min.mjs"
+        - "**/*.bundle.js"
+        - "**/*.chunk.js"
+        - "**/*.chunk.mjs"
+        - "**/*-init.mjs"
+        # Webpack/bundler output patterns (catches *-main.js, *-vendors-*.js)
+        - "**/*-main.js"
+        - "**/*-main.mjs"
+        - "**/*-vendors*.js"
+        - "**/*-vendors*.mjs"
+        - "**/*.umd.js"
+        - "**/*.cjs.js"
+        - "**/*.esm.js"
+        # Common library copies
+        - "**/js/lib/**"
+        - "**/js/libs/**"
+        - "**/js/vendor/**"
+        - "**/assets/js/**/*.js"
+        - "**/public/js/**"
+        - "**/static/js/**"
+        # Third-party embedded libraries
+        - "**/pdfjs/**"
+        - "**/smoothie.js"
+        - "**/chart.js"
+        - "**/jquery*.js"
+        - "**/lodash*.js"
+        - "**/underscore*.js"
+        # Test files
+        - "**/*.test.js"
+        - "**/*.test.ts"
+        - "**/*.spec.js"
+        - "**/*.spec.ts"
+        - "**/__tests__/**"
+        - "**/test/**"
+        - "**/tests/**"
+        - "**/cypress/**"
+        - "**/e2e/**"
+    patterns:
+      - pattern-either:
+          # Pattern: for...in loop with recursive assignment
+          - pattern: |
+              for (let $KEY in $SOURCE) {
+                ...
+                $TARGET[$KEY] = ...
+                ...
+              }
+          - pattern: |
+              for (var $KEY in $SOURCE) {
+                ...
+                $TARGET[$KEY] = ...
+                ...
+              }
+          - pattern: |
+              for (const $KEY in $SOURCE) {
+                ...
+                $TARGET[$KEY] = ...
+                ...
+              }
+          # Object.keys().forEach pattern
+          - pattern: |
+              Object.keys($SOURCE).forEach(function($KEY) {
+                ...
+                $TARGET[$KEY] = ...
+                ...
+              })
+          - pattern: |
+              Object.keys($SOURCE).forEach(($KEY) => {
+                ...
+                $TARGET[$KEY] = ...
+                ...
+              })
+      # REQUIRE: Must be inside a function with merge/extend/assign in name
+      - pattern-inside: |
+          function $FUNC(...) {
+            ...
+          }
+      - metavariable-regex:
+          metavariable: $FUNC
+          regex: "(?i)(merge|extend|assign|deep|combine|mixin|defaults)"
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [audit]
+      confidence: LOW
+      likelihood: MEDIUM
+      impact: HIGH
+
+      pattern_class: injection/prototype-pollution-rce
+      behavior: "Deep merge without hasOwnProperty check"
+      pattern_source: CVE-2025-55182
+
+      cwe: "CWE-1321: Improperly Controlled Modification of Object Prototype Attributes"
+      owasp: "A03:2021 - Injection"
+
+      references:
+        - https://securitylabs.datadoghq.com/articles/cve-2025-55182-react2shell-remote-code-execution-react-server-components/
+        - https://portswigger.net/web-security/prototype-pollution
+
+    message: >-
+      [AUDIT] Deep merge/extend function iterates over object properties.
+      MANUALLY VERIFY: Check if hasOwnProperty() is used. If not, attacker
+      can inject "__proto__" to pollute Object.prototype, leading to RCE.
+      Fix: Add hasOwnProperty check, or use Object.create(null) for target.
+
+    languages: [javascript, typescript]
+    severity: WARNING
+
+  # ---------------------------------------------------------------------------
+  # Rule 2: User input spread/assign into objects (Express/HTTP context)
+  # ---------------------------------------------------------------------------
+  - id: prototype-pollution-spread-http
+    mode: taint
+    paths:
+      exclude:
+        # Package managers and dependencies
+        - "**/node_modules/**"
+        - "**/vendor/**"
+        - "**/bower_components/**"
+        # Build outputs
+        - "**/dist/**"
+        - "**/build/**"
+        - "**/out/**"
+        - "**/.next/**"
+        - "**/.nuxt/**"
+        # Minified and bundled files
+        - "**/*.min.js"
+        - "**/*.min.mjs"
+        - "**/*.bundle.js"
+        - "**/*.chunk.js"
+        - "**/*.chunk.mjs"
+        - "**/*-init.mjs"
+        - "**/*-main.js"
+        - "**/*-main.mjs"
+        - "**/*-vendors*.js"
+        - "**/*-vendors*.mjs"
+        # Common library copies
+        - "**/js/lib/**"
+        - "**/js/vendor/**"
+        - "**/assets/js/**/*.js"
+        - "**/pdfjs/**"
+        # Test files
+        - "**/*.test.js"
+        - "**/*.test.ts"
+        - "**/*.spec.js"
+        - "**/*.spec.ts"
+        - "**/__tests__/**"
+        - "**/test/**"
+        - "**/tests/**"
+        - "**/cypress/**"
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [vuln]
+      confidence: HIGH
+      likelihood: MEDIUM
+      impact: HIGH
+
+      pattern_class: injection/prototype-pollution-rce
+      behavior: "HTTP request body/query spread into object"
+      pattern_source: CVE-2025-55182
+
+      cwe: "CWE-1321: Improperly Controlled Modification of Object Prototype Attributes"
+      owasp: "A03:2021 - Injection"
+
+      references:
+        - https://securitylabs.datadoghq.com/articles/cve-2025-55182-react2shell-remote-code-execution-react-server-components/
+
+    message: >-
+      User-controlled input (req.body/req.query) is spread or assigned directly
+      into an object. Attackers can set __proto__ properties in JSON to pollute
+      Object.prototype. This can lead to RCE if polluted values reach
+      child_process or template engines.
+      Fix: Sanitize input by filtering __proto__, constructor, prototype keys.
+
+    languages: [javascript, typescript]
+    severity: ERROR
+
+    pattern-sources:
+      - pattern: req.body
+      - pattern: req.query
+      - pattern: req.params
+      - pattern: request.body
+      - pattern: request.query
+      - pattern: ctx.request.body
+      - pattern: ctx.query
+
+    pattern-sinks:
+      # Object spread
+      - pattern: "{ ...$SINK }"
+        focus-metavariable: $SINK
+      - pattern: "{ ...$SINK, ... }"
+        focus-metavariable: $SINK
+      - pattern: "{ ...$OTHER, ...$SINK }"
+        focus-metavariable: $SINK
+      # Object.assign (tainted in any position)
+      - pattern: Object.assign($TARGET, $SINK)
+        focus-metavariable: $SINK
+      - pattern: Object.assign($TARGET, $SINK, ...)
+        focus-metavariable: $SINK
+      - pattern: Object.assign($TARGET, ..., $SINK)
+        focus-metavariable: $SINK
+      - pattern: Object.assign($TARGET, ..., $SINK, ...)
+        focus-metavariable: $SINK
+
+    pattern-sanitizers:
+      # JSON round-trip (loses __proto__ but NOT constructor.prototype)
+      - pattern: JSON.parse(JSON.stringify(...))
+
+  # ---------------------------------------------------------------------------
+  # Rule 3: Direct Object.assign/spread patterns (high confidence)
+  # ---------------------------------------------------------------------------
+  - id: prototype-pollution-object-assign
+    paths:
+      exclude:
+        # Package managers and dependencies
+        - "**/node_modules/**"
+        - "**/vendor/**"
+        - "**/bower_components/**"
+        # Build outputs
+        - "**/dist/**"
+        - "**/build/**"
+        - "**/out/**"
+        - "**/.next/**"
+        - "**/.nuxt/**"
+        # Minified and bundled files
+        - "**/*.min.js"
+        - "**/*.min.mjs"
+        - "**/*.bundle.js"
+        - "**/*.chunk.js"
+        - "**/*.chunk.mjs"
+        - "**/*-init.mjs"
+        - "**/*-main.js"
+        - "**/*-main.mjs"
+        - "**/*-vendors*.js"
+        - "**/*-vendors*.mjs"
+        # Common library copies
+        - "**/js/lib/**"
+        - "**/js/vendor/**"
+        - "**/assets/js/**/*.js"
+        - "**/pdfjs/**"
+        # Test files
+        - "**/*.test.js"
+        - "**/*.test.ts"
+        - "**/*.spec.js"
+        - "**/*.spec.ts"
+        - "**/__tests__/**"
+        - "**/test/**"
+        - "**/tests/**"
+        - "**/cypress/**"
+    patterns:
+      - pattern-either:
+          # Direct spread of req.body/query
+          - pattern: "{ ...req.body }"
+          - pattern: "{ ...req.query }"
+          - pattern: "{ ...req.body, ... }"
+          - pattern: "{ ...req.query, ... }"
+          - pattern: "{ ...$X, ...req.body }"
+          - pattern: "{ ...$X, ...req.query }"
+          - pattern: "{ ...$X, ...req.body, ... }"
+          - pattern: "{ ...$X, ...req.query, ... }"
+          # Object.assign with req.body/query
+          - pattern: Object.assign($TARGET, req.body)
+          - pattern: Object.assign($TARGET, req.query)
+          - pattern: Object.assign($TARGET, req.body, ...)
+          - pattern: Object.assign($TARGET, req.query, ...)
+          # lodash/underscore extend
+          - pattern: _.merge($TARGET, req.body)
+          - pattern: _.merge($TARGET, req.query)
+          - pattern: _.extend($TARGET, req.body)
+          - pattern: _.extend($TARGET, req.query)
+          - pattern: _.defaultsDeep($TARGET, req.body)
+          - pattern: _.defaultsDeep($TARGET, req.query)
+
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [vuln]
+      confidence: HIGH
+      likelihood: MEDIUM
+      impact: HIGH
+
+      pattern_class: injection/prototype-pollution-rce
+      behavior: "Direct spread/assign of HTTP input"
+      pattern_source: CVE-2025-55182
+
+      cwe: "CWE-1321: Improperly Controlled Modification of Object Prototype Attributes"
+      owasp: "A03:2021 - Injection"
+
+    message: >-
+      HTTP request data is directly spread or assigned into an object.
+      Attackers can send {"__proto__": {"polluted": true}} to pollute
+      Object.prototype globally. This can escalate to RCE via gadgets.
+      Fix: Filter dangerous keys before merging, or use Map for user data.
+
+    languages: [javascript, typescript]
+    severity: ERROR
+
+  # ---------------------------------------------------------------------------
+  # Rule 4: Prototype pollution to child_process (RCE gadget)
+  # ---------------------------------------------------------------------------
+  # Detects when polluted options reach child_process sinks
+  - id: prototype-pollution-to-child-process
+    mode: taint
+    paths:
+      exclude:
+        # Package managers and dependencies
+        - "**/node_modules/**"
+        - "**/vendor/**"
+        - "**/bower_components/**"
+        # Build outputs
+        - "**/dist/**"
+        - "**/build/**"
+        - "**/out/**"
+        - "**/.next/**"
+        - "**/.nuxt/**"
+        # Minified and bundled files
+        - "**/*.min.js"
+        - "**/*.min.mjs"
+        - "**/*.bundle.js"
+        - "**/*.chunk.js"
+        - "**/*.chunk.mjs"
+        - "**/*-init.mjs"
+        - "**/*-main.js"
+        - "**/*-main.mjs"
+        - "**/*-vendors*.js"
+        - "**/*-vendors*.mjs"
+        # Common library copies
+        - "**/js/lib/**"
+        - "**/js/vendor/**"
+        - "**/assets/js/**/*.js"
+        - "**/pdfjs/**"
+        # Test files
+        - "**/*.test.js"
+        - "**/*.test.ts"
+        - "**/*.spec.js"
+        - "**/*.spec.ts"
+        - "**/__tests__/**"
+        - "**/test/**"
+        - "**/tests/**"
+        - "**/cypress/**"
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [vuln]
+      confidence: MEDIUM
+      likelihood: MEDIUM
+      impact: HIGH
+
+      pattern_class: injection/prototype-pollution-rce
+      behavior: "Object with potential pollution reaches child_process"
+      pattern_source: CVE-2025-55182
+
+      cwe: "CWE-1321: Improperly Controlled Modification of Object Prototype Attributes"
+      owasp: "A03:2021 - Injection"
+
+      references:
+        - https://securitylabs.datadoghq.com/articles/cve-2025-55182-react2shell-remote-code-execution-react-server-components/
+        - https://blog.sonarsource.com/blitzjs-prototype-pollution/
+
+    message: >-
+      User-controlled data flows to child_process spawn/exec options.
+      If Object.prototype is polluted (via spread, merge, or __proto__),
+      attackers can inject shell/env options for RCE.
+      Fix: Use Object.create(null) for options, or sanitize user input.
+
+    languages: [javascript, typescript]
+    severity: ERROR
+
+    pattern-sources:
+      - pattern: req.body
+      - pattern: req.query
+      - pattern: req.params
+      # Spread creates a new object that inherits from Object.prototype
+      - pattern: "{ ...$X }"
+      # Object.assign also inherits
+      - pattern: Object.assign({}, ...)
+
+    pattern-sinks:
+      # child_process options are the RCE gadget
+      - pattern: spawn($CMD, $ARGS, $OPTS)
+        focus-metavariable: $OPTS
+      - pattern: spawnSync($CMD, $ARGS, $OPTS)
+        focus-metavariable: $OPTS
+      - pattern: exec($CMD, $OPTS, ...)
+        focus-metavariable: $OPTS
+      - pattern: execSync($CMD, $OPTS)
+        focus-metavariable: $OPTS
+      - pattern: execFile($CMD, $ARGS, $OPTS, ...)
+        focus-metavariable: $OPTS
+      - pattern: fork($MOD, $ARGS, $OPTS)
+        focus-metavariable: $OPTS
+      - pattern: child_process.spawn($CMD, $ARGS, $OPTS)
+        focus-metavariable: $OPTS
+      - pattern: child_process.exec($CMD, $OPTS, ...)
+        focus-metavariable: $OPTS
+      - pattern: child_process.execSync($CMD, $OPTS)
+        focus-metavariable: $OPTS
+
+    pattern-sanitizers:
+      # Object.create(null) has no prototype
+      - pattern: Object.create(null)
+      # Explicit literal options
+      - pattern: "{ shell: false }"
+      - pattern: "{ shell: false, ... }"
+
+  # ---------------------------------------------------------------------------
+  # Rule 5: Query/URL parser with BRACKET NOTATION (nested object creation)
+  # ---------------------------------------------------------------------------
+  # IMPORTANT: Simple key=value parsers are NOT vulnerable!
+  # result[key] = value just sets a property - no prototype pollution.
+  #
+  # The DANGEROUS pattern is bracket notation parsing that creates nested
+  # objects: "a[b]=c" → {a: {b: c}}
+  # This allows: "__proto__[polluted]=true" → Object.prototype.polluted = true
+  #
+  # We detect parsers that:
+  # 1. Split on bracket characters [ ]
+  # 2. Create nested objects from the parsed path
+  # 3. Use regex to extract bracket contents
+  - id: prototype-pollution-bracket-notation-parser
+    paths:
+      exclude:
+        # Package managers and dependencies
+        - "**/node_modules/**"
+        - "**/vendor/**"
+        - "**/bower_components/**"
+        # Build outputs
+        - "**/dist/**"
+        - "**/build/**"
+        - "**/out/**"
+        - "**/.next/**"
+        - "**/.nuxt/**"
+        # Minified and bundled files
+        - "**/*.min.js"
+        - "**/*.min.mjs"
+        - "**/*.bundle.js"
+        - "**/*.chunk.js"
+        - "**/*.chunk.mjs"
+        - "**/*-init.mjs"
+        - "**/*-main.js"
+        - "**/*-main.mjs"
+        - "**/*-vendors*.js"
+        - "**/*-vendors*.mjs"
+        # Common library copies
+        - "**/js/lib/**"
+        - "**/js/libs/**"
+        - "**/js/vendor/**"
+        - "**/assets/js/**/*.js"
+        - "**/pdfjs/**"
+        # Documentation static files
+        - "**/_static/**"
+        - "**/docs/**/*.js"
+        - "**/doc/**/*.js"
+        - "**/documentation/**/*.js"
+        # Bundled JS in app js folders (webpack output)
+        - "**/js/*.mjs"
+        - "**/js/vendors-*.js"
+        # Well-known library files
+        - "**/jquery*.js"
+        - "**/jquery.*.js"
+        - "**/underscore*.js"
+        - "**/backbone*.js"
+        - "**/angular*.js"
+        - "**/react*.js"
+        - "**/vue*.js"
+        - "**/smoothie*.js"
+        # Test files
+        - "**/*.test.js"
+        - "**/*.test.ts"
+        - "**/*.spec.js"
+        - "**/*.spec.ts"
+        - "**/__tests__/**"
+        - "**/test/**"
+        - "**/tests/**"
+        - "**/cypress/**"
+    patterns:
+      - pattern-either:
+          # Regex to extract bracket contents (classic qs-style parsing)
+          # These patterns indicate query string parsing with nested key support
+          - pattern: $KEY.match(/\[([^\]]*)\]/g)
+          - pattern: $KEY.match(/\[([^\[\]]*)\]/)
+          - pattern: /\[([^\]]*)\]/.exec($KEY)
+          - pattern: /\[([^\[\]]*)\]/.exec($KEY)
+          # Split on brackets - indicates parsing a[b][c] style keys
+          - pattern: $KEY.split(/[\[\]]/)
+          - pattern: $KEY.split("[")
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [vuln]
+      confidence: MEDIUM
+      likelihood: MEDIUM
+      impact: HIGH
+
+      pattern_class: injection/prototype-pollution-rce
+      behavior: "Bracket notation parser creates nested objects from user keys"
+      pattern_source: CVE-2019-11358
+
+      cwe: "CWE-1321: Improperly Controlled Modification of Object Prototype Attributes"
+
+      references:
+        - https://portswigger.net/web-security/prototype-pollution
+        - https://github.com/ljharb/qs/issues/200
+
+    message: >-
+      Query parser uses bracket notation to create nested objects from user input.
+      Pattern like "a[b]=c" creates {a:{b:c}}, allowing "__proto__[x]=y" to pollute
+      Object.prototype. This is the classic qs/query-string vulnerability pattern.
+      Fix: Filter __proto__, constructor, prototype keys before creating nested objects.
+
+    languages: [javascript, typescript]
+    severity: ERROR
+
+  # ---------------------------------------------------------------------------
+  # Rule 6: Lodash/library vulnerable merge without version check
+  # ---------------------------------------------------------------------------
+  # Note: This supplements SCA - catches cases where lodash is vulnerable
+  # AND being used with user input, making exploitation more likely
+  - id: prototype-pollution-lodash-merge-user-input
+    mode: taint
+    paths:
+      exclude:
+        # Package managers and dependencies
+        - "**/node_modules/**"
+        - "**/vendor/**"
+        - "**/bower_components/**"
+        # Build outputs
+        - "**/dist/**"
+        - "**/build/**"
+        - "**/out/**"
+        - "**/.next/**"
+        - "**/.nuxt/**"
+        # Minified and bundled files
+        - "**/*.min.js"
+        - "**/*.min.mjs"
+        - "**/*.bundle.js"
+        - "**/*.chunk.js"
+        - "**/*.chunk.mjs"
+        - "**/*-init.mjs"
+        - "**/*-main.js"
+        - "**/*-main.mjs"
+        - "**/*-vendors*.js"
+        - "**/*-vendors*.mjs"
+        # Common library copies
+        - "**/js/lib/**"
+        - "**/js/vendor/**"
+        - "**/assets/js/**/*.js"
+        - "**/pdfjs/**"
+        # Test files
+        - "**/*.test.js"
+        - "**/*.test.ts"
+        - "**/*.spec.js"
+        - "**/*.spec.ts"
+        - "**/__tests__/**"
+        - "**/test/**"
+        - "**/tests/**"
+        - "**/cypress/**"
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [vuln]
+      confidence: MEDIUM
+      likelihood: MEDIUM
+      impact: HIGH
+
+      pattern_class: injection/prototype-pollution-rce
+      behavior: "Lodash merge with user-controlled input"
+      pattern_source: CVE-2025-55182
+
+      cwe: "CWE-1321: Improperly Controlled Modification of Object Prototype Attributes"
+
+      references:
+        - https://security.snyk.io/vuln/SNYK-JS-LODASH-450202
+        - https://hackerone.com/reports/712065
+
+    message: >-
+      User-controlled input is passed to lodash merge/defaultsDeep.
+      Older lodash versions (< 4.17.12 for merge, < 4.17.16 for defaultsDeep)
+      are vulnerable to prototype pollution. Even patched versions may have
+      bypasses.
+      Fix: Sanitize input keys before merging, or avoid merging user objects.
+
+    languages: [javascript, typescript]
+    severity: WARNING
+
+    pattern-sources:
+      - pattern: req.body
+      - pattern: req.query
+      - pattern: ctx.request.body
+
+    pattern-sinks:
+      # 2-arg patterns
+      - pattern: _.merge($TARGET, $SINK)
+        focus-metavariable: $SINK
+      - pattern: _.defaultsDeep($TARGET, $SINK)
+        focus-metavariable: $SINK
+      # 3+ arg patterns (tainted source can be any position after target)
+      - pattern: _.merge($TARGET, $SINK, ...)
+        focus-metavariable: $SINK
+      - pattern: _.merge($TARGET, ..., $SINK)
+        focus-metavariable: $SINK
+      - pattern: _.merge($TARGET, ..., $SINK, ...)
+        focus-metavariable: $SINK
+      - pattern: _.defaultsDeep($TARGET, $SINK, ...)
+        focus-metavariable: $SINK
+      - pattern: _.defaultsDeep($TARGET, ..., $SINK)
+        focus-metavariable: $SINK
+      - pattern: _.mergeWith($TARGET, $SINK, ...)
+        focus-metavariable: $SINK
+      - pattern: _.mergeWith($TARGET, ..., $SINK, ...)
+        focus-metavariable: $SINK
+      # Generic merge functions
+      - pattern: merge($TARGET, $SINK)
+        focus-metavariable: $SINK
+      - pattern: merge($TARGET, $SINK, ...)
+        focus-metavariable: $SINK
+      - pattern: merge($TARGET, ..., $SINK)
+        focus-metavariable: $SINK
+      - pattern: deepmerge($TARGET, $SINK)
+        focus-metavariable: $SINK
+      - pattern: deepmerge($TARGET, ..., $SINK)
+        focus-metavariable: $SINK
+
+    pattern-sanitizers:
+      - pattern: JSON.parse(JSON.stringify(...))

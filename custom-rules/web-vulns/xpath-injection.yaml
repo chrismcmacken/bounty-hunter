@@ -1,0 +1,319 @@
+rules:
+  # =============================================================================
+  # XPath Injection Detection Rules - Taint Mode
+  # =============================================================================
+  # CWE-643: Improper Neutralization of Data within XPath Expressions
+  #
+  # These rules track user-controlled input flowing to XPath evaluation functions.
+  # Semgrep p/default covers XPath injection for C# and partially PHP, but lacks
+  # coverage for Python (lxml, defusedxml) and Java (javax.xml.xpath).
+  #
+  # Attack pattern: User input concatenated into XPath queries enables:
+  # - Authentication bypass: ' or '1'='1
+  # - Data extraction: '] | //user | //user['
+  # - Boolean-based extraction: admin' and substring(password,1,1)='a' or '1'='2
+  # =============================================================================
+
+  # ---------------------------------------------------------------------------
+  # Python XPath Injection (Flask/Django → lxml/defusedxml)
+  # ---------------------------------------------------------------------------
+  - id: python-xpath-injection
+    mode: taint
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [vuln]
+      confidence: HIGH
+      likelihood: MEDIUM
+      impact: HIGH
+      cwe: "CWE-643: Improper Neutralization of Data within XPath Expressions"
+      owasp: "A03:2021 - Injection"
+      references:
+        - https://owasp.org/www-community/attacks/XPATH_Injection
+        - https://book.hacktricks.xyz/pentesting-web/xpath-injection
+        - https://cwe.mitre.org/data/definitions/643.html
+    message: >-
+      User-controlled input flows to an XPath query. This could allow XPath injection
+      attacks where an attacker bypasses authentication, extracts sensitive data, or
+      enumerates the XML structure. Use parameterized XPath queries with lxml's variable
+      support: tree.xpath("//user[name=$name]", name=user_input)
+    languages: [python]
+    severity: ERROR
+    pattern-sources:
+      # Flask sources
+      - pattern: request.args.get(...)
+      - pattern: request.args[...]
+      - pattern: request.form.get(...)
+      - pattern: request.form[...]
+      - pattern: request.json.get(...)
+      - pattern: request.json[...]
+      - pattern: request.data
+      - pattern: request.values.get(...)
+      - pattern: request.values[...]
+      # Django sources
+      - pattern: request.GET.get(...)
+      - pattern: request.GET[...]
+      - pattern: request.POST.get(...)
+      - pattern: request.POST[...]
+      - pattern: request.body
+      # FastAPI sources
+      - pattern: "$VAR: str = Query(...)"
+      - pattern: "$VAR: str = Form(...)"
+    pattern-sinks:
+      # lxml.etree
+      - pattern: $TREE.xpath($QUERY, ...)
+        focus-metavariable: $QUERY
+      - pattern: etree.XPath($QUERY, ...)
+        focus-metavariable: $QUERY
+      - pattern: lxml.etree.XPath($QUERY, ...)
+        focus-metavariable: $QUERY
+      # defusedxml uses lxml under the hood
+      - pattern: $ELEMENT.xpath($QUERY, ...)
+        focus-metavariable: $QUERY
+      # xml.etree.ElementTree (stdlib)
+      - pattern: $TREE.find($QUERY, ...)
+        focus-metavariable: $QUERY
+      - pattern: $TREE.findall($QUERY, ...)
+        focus-metavariable: $QUERY
+      - pattern: $TREE.iterfind($QUERY, ...)
+        focus-metavariable: $QUERY
+    pattern-sanitizers:
+      # Parameterized XPath (lxml supports this)
+      - pattern: $TREE.xpath("...", $VAR=...)
+      # Input validation patterns
+      - pattern: re.match("...", $INPUT)
+      - pattern: re.fullmatch("...", $INPUT)
+      # Type casting
+      - pattern: int($INPUT)
+      - pattern: float($INPUT)
+
+  # ---------------------------------------------------------------------------
+  # Java XPath Injection (Spring/Servlets → javax.xml.xpath)
+  # ---------------------------------------------------------------------------
+  - id: java-xpath-injection
+    mode: taint
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [vuln]
+      confidence: HIGH
+      likelihood: MEDIUM
+      impact: HIGH
+      cwe: "CWE-643: Improper Neutralization of Data within XPath Expressions"
+      owasp: "A03:2021 - Injection"
+      references:
+        - https://owasp.org/www-community/attacks/XPATH_Injection
+        - https://cwe.mitre.org/data/definitions/643.html
+    message: >-
+      User-controlled input flows to an XPath query. This could allow XPath injection
+      attacks. Use XPath variables with XPathVariableResolver instead of string
+      concatenation to safely handle user input.
+    languages: [java]
+    severity: ERROR
+    pattern-sources:
+      # Spring MVC sources
+      - pattern: "@RequestParam(...) String $PARAM"
+      - pattern: "@PathVariable(...) String $PARAM"
+      - pattern: "@RequestBody $TYPE $PARAM"
+      # Servlet sources
+      - pattern: request.getParameter(...)
+      - pattern: request.getHeader(...)
+      - pattern: request.getAttribute(...)
+    pattern-sinks:
+      # javax.xml.xpath.XPath
+      - pattern: $XPATH.evaluate($EXPR, ...)
+        focus-metavariable: $EXPR
+      - pattern: $XPATH.compile($EXPR)
+        focus-metavariable: $EXPR
+      # XPathExpression
+      - pattern: (XPathExpression) $XPATH.compile($EXPR)
+        focus-metavariable: $EXPR
+      # DOM methods that accept XPath
+      - pattern: $NODE.selectNodes($EXPR)
+        focus-metavariable: $EXPR
+      - pattern: $NODE.selectSingleNode($EXPR)
+        focus-metavariable: $EXPR
+    pattern-sanitizers:
+      # XPath variable resolver indicates proper handling
+      - pattern: $XPATH.setXPathVariableResolver(...)
+      # Pattern matching for validation
+      - pattern: $INPUT.matches("...")
+
+  # ---------------------------------------------------------------------------
+  # PHP XPath Injection (SimpleXML/DOMXPath)
+  # ---------------------------------------------------------------------------
+  - id: php-xpath-injection
+    mode: taint
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [vuln]
+      confidence: HIGH
+      likelihood: MEDIUM
+      impact: HIGH
+      cwe: "CWE-643: Improper Neutralization of Data within XPath Expressions"
+      owasp: "A03:2021 - Injection"
+      references:
+        - https://owasp.org/www-community/attacks/XPATH_Injection
+        - https://cwe.mitre.org/data/definitions/643.html
+    message: >-
+      User-controlled input flows to an XPath query. This could allow XPath injection
+      attacks where an attacker bypasses authentication or extracts sensitive data.
+      Validate and sanitize user input before including it in XPath expressions.
+      Consider using allowlists for expected values.
+    languages: [php]
+    severity: ERROR
+    pattern-sources:
+      # PHP superglobals
+      - pattern: $_GET[...]
+      - pattern: $_POST[...]
+      - pattern: $_REQUEST[...]
+      - pattern: $_COOKIE[...]
+      # Laravel sources
+      - pattern: $request->input(...)
+      - pattern: $request->get(...)
+      - pattern: $request->query(...)
+      - pattern: $request->post(...)
+    pattern-sinks:
+      # SimpleXML
+      - pattern: $XML->xpath($QUERY)
+        focus-metavariable: $QUERY
+      - pattern: simplexml_load_string(...)->xpath($QUERY)
+        focus-metavariable: $QUERY
+      - pattern: simplexml_load_file(...)->xpath($QUERY)
+        focus-metavariable: $QUERY
+      # DOMXPath
+      - pattern: $DOMXPATH->query($QUERY, ...)
+        focus-metavariable: $QUERY
+      - pattern: $DOMXPATH->evaluate($QUERY, ...)
+        focus-metavariable: $QUERY
+      - pattern: (new DOMXPath(...))->query($QUERY, ...)
+        focus-metavariable: $QUERY
+      - pattern: (new DOMXPath(...))->evaluate($QUERY, ...)
+        focus-metavariable: $QUERY
+    pattern-sanitizers:
+      # Input validation
+      - pattern: preg_match("...", $INPUT)
+      - pattern: ctype_alnum($INPUT)
+      - pattern: ctype_alpha($INPUT)
+      # Type casting
+      - pattern: (int) $INPUT
+      - pattern: intval($INPUT)
+
+  # ---------------------------------------------------------------------------
+  # C# XPath Injection (ASP.NET → System.Xml.XPath)
+  # ---------------------------------------------------------------------------
+  - id: csharp-xpath-injection
+    mode: taint
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [vuln]
+      confidence: HIGH
+      likelihood: MEDIUM
+      impact: HIGH
+      cwe: "CWE-643: Improper Neutralization of Data within XPath Expressions"
+      owasp: "A03:2021 - Injection"
+      references:
+        - https://owasp.org/www-community/attacks/XPATH_Injection
+        - https://cwe.mitre.org/data/definitions/643.html
+    message: >-
+      User-controlled input flows to an XPath query. This could allow XPath injection
+      attacks. Use parameterized XPath queries with XsltContext and custom variable
+      resolution, or validate input against an allowlist of expected values.
+    languages: [csharp]
+    severity: ERROR
+    pattern-sources:
+      # ASP.NET Core sources
+      - pattern: Request.Query[...]
+      - pattern: Request.Form[...]
+      - pattern: Request.Headers[...]
+      # HttpContext
+      - pattern: HttpContext.Request.Query[...]
+      - pattern: HttpContext.Request.Form[...]
+    pattern-sinks:
+      # XPathNavigator
+      - pattern: $NAV.Select($EXPR, ...)
+        focus-metavariable: $EXPR
+      - pattern: $NAV.SelectSingleNode($EXPR, ...)
+        focus-metavariable: $EXPR
+      - pattern: $NAV.Evaluate($EXPR, ...)
+        focus-metavariable: $EXPR
+      - pattern: $NAV.Compile($EXPR)
+        focus-metavariable: $EXPR
+      # XmlNode
+      - pattern: $NODE.SelectNodes($EXPR, ...)
+        focus-metavariable: $EXPR
+      - pattern: $NODE.SelectSingleNode($EXPR, ...)
+        focus-metavariable: $EXPR
+      # XmlDocument
+      - pattern: $DOC.SelectNodes($EXPR, ...)
+        focus-metavariable: $EXPR
+      - pattern: $DOC.SelectSingleNode($EXPR, ...)
+        focus-metavariable: $EXPR
+    pattern-sanitizers:
+      # Regex validation
+      - pattern: Regex.IsMatch($INPUT, "...")
+      - pattern: Regex.Match($INPUT, "...")
+      # Type parsing
+      - pattern: int.Parse($INPUT)
+      - pattern: int.TryParse($INPUT, ...)
+
+  # ---------------------------------------------------------------------------
+  # Ruby XPath Injection (Rails → Nokogiri/REXML)
+  # ---------------------------------------------------------------------------
+  - id: ruby-xpath-injection
+    mode: taint
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [vuln]
+      confidence: HIGH
+      likelihood: MEDIUM
+      impact: HIGH
+      cwe: "CWE-643: Improper Neutralization of Data within XPath Expressions"
+      owasp: "A03:2021 - Injection"
+      references:
+        - https://owasp.org/www-community/attacks/XPATH_Injection
+        - https://cwe.mitre.org/data/definitions/643.html
+    message: >-
+      User-controlled input flows to an XPath query. This could allow XPath injection
+      attacks. Validate user input against an allowlist or use parameterized queries
+      where supported. Escape special XPath characters in user input.
+    languages: [ruby]
+    severity: ERROR
+    pattern-sources:
+      # Rails sources
+      - pattern: params[...]
+      - pattern: params.fetch(...)
+      - pattern: params.require(...).permit(...)
+      - pattern: request.params[...]
+      - pattern: request.query_parameters[...]
+      - pattern: request.request_parameters[...]
+    pattern-sinks:
+      # Nokogiri
+      - pattern: $DOC.xpath($QUERY, ...)
+        focus-metavariable: $QUERY
+      - pattern: $DOC.at_xpath($QUERY, ...)
+        focus-metavariable: $QUERY
+      - pattern: $NODE.xpath($QUERY, ...)
+        focus-metavariable: $QUERY
+      - pattern: $NODE.at_xpath($QUERY, ...)
+        focus-metavariable: $QUERY
+      - pattern: Nokogiri::XML(...).xpath($QUERY, ...)
+        focus-metavariable: $QUERY
+      - pattern: Nokogiri::HTML(...).xpath($QUERY, ...)
+        focus-metavariable: $QUERY
+      # REXML
+      - pattern: REXML::XPath.first($DOC, $QUERY, ...)
+        focus-metavariable: $QUERY
+      - pattern: REXML::XPath.each($DOC, $QUERY, ...)
+        focus-metavariable: $QUERY
+      - pattern: REXML::XPath.match($DOC, $QUERY, ...)
+        focus-metavariable: $QUERY
+    pattern-sanitizers:
+      # Input validation
+      - pattern: $INPUT.match?(/.../)
+      - pattern: $INPUT =~ /^[a-zA-Z0-9_]+$/
+      # Type casting
+      - pattern: $INPUT.to_i

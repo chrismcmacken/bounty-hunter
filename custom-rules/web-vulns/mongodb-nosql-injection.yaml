@@ -1,0 +1,579 @@
+rules:
+  # =============================================================================
+  # MongoDB/NoSQL Injection Detection Rules
+  # =============================================================================
+  # Taint mode rules tracking user input to MongoDB query methods.
+  #
+  # Gap filled: p/default has JavaScript (njsscan) and Java coverage but
+  # LACKS Python pymongo rules - a significant gap for Flask/Django/FastAPI apps.
+  #
+  # Attack vectors:
+  # - Operator injection: {"password": {"$ne": ""}} bypasses auth
+  # - $where injection: JavaScript execution in queries
+  # - $regex injection: ReDoS or data extraction
+  # - Aggregation injection: Pipeline manipulation
+  # =============================================================================
+
+  # ---------------------------------------------------------------------------
+  # Python: pymongo NoSQL Injection
+  # ---------------------------------------------------------------------------
+  - id: python-pymongo-nosql-injection
+    mode: taint
+    paths:
+      exclude:
+        - "**/node_modules/**"
+        - "**/vendor/**"
+        - "**/dist/**"
+        - "**/build/**"
+        - "**/*.min.js"
+        - "**/*.min.mjs"
+        - "**/*.bundle.js"
+        - "**/*.chunk.js"
+        - "**/*.chunk.mjs"
+        - "**/*-init.mjs"
+    languages:
+      - python
+    message: |
+      User-controlled input flows to a MongoDB query method. An attacker can inject
+      query operators like {"$ne": ""}, {"$gt": ""}, or {"$regex": ".*"} to bypass
+      authentication, extract data, or cause denial of service.
+
+      Example attack: POST {"username": "admin", "password": {"$ne": ""}}
+      Result: Authenticates as admin without knowing the password.
+
+      Remediation:
+      - Validate that query values are the expected type (str, int, not dict)
+      - Reject any keys starting with "$" in user input
+      - Use schema validation (e.g., pydantic, marshmallow) before queries
+    severity: ERROR
+    metadata:
+      cwe: "CWE-943"
+      cwe_name: "Improper Neutralization of Special Elements in Data Query Logic"
+      owasp:
+        - "A03:2021-Injection"
+      category: security
+      subcategory:
+        - vuln
+      confidence: HIGH
+      likelihood: HIGH
+      impact: HIGH
+      author: "threat-hunting"
+      references:
+        - https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/07-Input_Validation_Testing/05.6-Testing_for_NoSQL_Injection
+        - https://book.hacktricks.xyz/pentesting-web/nosql-injection
+        - https://nullsweep.com/nosql-injection-cheatsheet/
+    pattern-sources:
+      # Flask
+      - pattern: request.args.get(...)
+      - pattern: request.args[...]
+      - pattern: request.form.get(...)
+      - pattern: request.form[...]
+      - pattern: request.json
+      - pattern: request.json.get(...)
+      - pattern: request.json[...]
+      - pattern: request.get_json()
+      - pattern: request.get_json(...)
+      - pattern: request.data
+      - pattern: request.values.get(...)
+      - pattern: request.values[...]
+      # Django
+      - pattern: request.GET.get(...)
+      - pattern: request.GET[...]
+      - pattern: request.POST.get(...)
+      - pattern: request.POST[...]
+      - pattern: request.body
+      - pattern: request.data
+      - pattern: request.data.get(...)
+      - pattern: request.data[...]
+      # FastAPI / Starlette
+      - pattern: await request.json()
+      - pattern: await request.body()
+      # Generic JSON parsing
+      - pattern: json.loads(...)
+      - pattern: json.load(...)
+    pattern-sinks:
+      # PyMongo Collection methods
+      - pattern: $COLL.find($QUERY, ...)
+      - pattern: $COLL.find($QUERY)
+      - pattern: $COLL.find_one($QUERY, ...)
+      - pattern: $COLL.find_one($QUERY)
+      - pattern: $COLL.find_one_and_delete($QUERY, ...)
+      - pattern: $COLL.find_one_and_replace($QUERY, ...)
+      - pattern: $COLL.find_one_and_update($QUERY, ...)
+      - pattern: $COLL.count_documents($QUERY, ...)
+      - pattern: $COLL.count_documents($QUERY)
+      - pattern: $COLL.delete_one($QUERY, ...)
+      - pattern: $COLL.delete_one($QUERY)
+      - pattern: $COLL.delete_many($QUERY, ...)
+      - pattern: $COLL.delete_many($QUERY)
+      - pattern: $COLL.update_one($QUERY, ...)
+      - pattern: $COLL.update_many($QUERY, ...)
+      - pattern: $COLL.replace_one($QUERY, ...)
+      - pattern: $COLL.aggregate($PIPELINE, ...)
+      - pattern: $COLL.aggregate($PIPELINE)
+      # Motor (async pymongo)
+      - pattern: await $COLL.find($QUERY, ...)
+      - pattern: await $COLL.find_one($QUERY, ...)
+      - pattern: await $COLL.find_one_and_update($QUERY, ...)
+      - pattern: await $COLL.count_documents($QUERY, ...)
+      # MongoEngine ODM
+      - pattern: $MODEL.objects(__raw__=$QUERY)
+      - pattern: $MODEL.objects.filter(__raw__=$QUERY)
+    pattern-sanitizers:
+      # Type checking indicates awareness
+      - pattern: isinstance($X, str)
+      - pattern: isinstance($X, int)
+      - pattern: isinstance($X, (str, int))
+      # Schema validation
+      - pattern: $SCHEMA.validate(...)
+      - pattern: $SCHEMA.load(...)
+      - pattern: $MODEL.parse_obj(...)
+      - pattern: $MODEL.model_validate(...)
+      # Explicit string conversion
+      - pattern: str(...)
+      - pattern: int(...)
+      - pattern: ObjectId(...)
+
+  # ---------------------------------------------------------------------------
+  # Python: Direct $where/$regex operator usage (HIGH confidence)
+  # ---------------------------------------------------------------------------
+  - id: python-pymongo-dangerous-operators
+    mode: taint
+    paths:
+      exclude:
+        - "**/node_modules/**"
+        - "**/vendor/**"
+        - "**/dist/**"
+        - "**/build/**"
+        - "**/*.min.js"
+        - "**/*.min.mjs"
+        - "**/*.bundle.js"
+        - "**/*.chunk.js"
+        - "**/*.chunk.mjs"
+        - "**/*-init.mjs"
+    languages:
+      - python
+    message: |
+      User input flows to a MongoDB query using dangerous operators ($where, $regex).
+
+      - $where allows JavaScript execution: {"$where": "this.password == 'x' || true"}
+      - $regex can cause ReDoS: {"$regex": "^(a+)+$"}
+
+      Remediation:
+      - Never allow $where with user input (disable if possible)
+      - Validate $regex patterns or use exact matching instead
+    severity: ERROR
+    metadata:
+      cwe: "CWE-943"
+      owasp:
+        - "A03:2021-Injection"
+      category: security
+      subcategory:
+        - vuln
+      confidence: HIGH
+      likelihood: HIGH
+      impact: HIGH
+      author: "threat-hunting"
+      references:
+        - https://www.mongodb.com/docs/manual/reference/operator/query/where/
+    pattern-sources:
+      - pattern: request.args.get(...)
+      - pattern: request.args[...]
+      - pattern: request.form.get(...)
+      - pattern: request.json
+      - pattern: request.json.get(...)
+      - pattern: request.json[...]
+      - pattern: request.GET.get(...)
+      - pattern: request.POST.get(...)
+      - pattern: await request.json()
+    pattern-sinks:
+      # $where operator - JavaScript execution
+      - pattern: '$COLL.find({"$where": $CODE, ...})'
+      - pattern: '$COLL.find_one({"$where": $CODE, ...})'
+      - pattern: '{"$where": $CODE}'
+      # $regex operator
+      - pattern: '$COLL.find({..., "$regex": $PATTERN, ...})'
+      - pattern: '$COLL.find_one({..., "$regex": $PATTERN, ...})'
+      - pattern: '{"$regex": $PATTERN}'
+
+  # ---------------------------------------------------------------------------
+  # Node.js: MongoDB/Mongoose NoSQL Injection (supplements njsscan)
+  # ---------------------------------------------------------------------------
+  - id: nodejs-mongodb-nosql-injection
+    mode: taint
+    paths:
+      exclude:
+        - "**/node_modules/**"
+        - "**/vendor/**"
+        - "**/dist/**"
+        - "**/build/**"
+        - "**/*.min.js"
+        - "**/*.min.mjs"
+        - "**/*.bundle.js"
+        - "**/*.chunk.js"
+        - "**/*.chunk.mjs"
+        - "**/*-init.mjs"
+    languages:
+      - javascript
+      - typescript
+    message: |
+      User-controlled input flows to a MongoDB query. An attacker can inject query
+      operators to bypass authentication or extract data.
+
+      Example: req.body.password = {"$ne": ""} bypasses password check.
+
+      Remediation:
+      - Use mongo-sanitize package to strip $ operators
+      - Validate input types explicitly before queries
+      - Use mongoose schema validation with strict types
+    severity: ERROR
+    metadata:
+      cwe: "CWE-943"
+      owasp:
+        - "A03:2021-Injection"
+      category: security
+      subcategory:
+        - vuln
+      confidence: HIGH
+      likelihood: HIGH
+      impact: HIGH
+      author: "threat-hunting"
+      references:
+        - https://blog.websecurify.com/2014/08/hacking-nodejs-and-mongodb
+        - https://owasp.org/www-pdf-archive/GOD16-NOSQL.pdf
+    pattern-sources:
+      # Express
+      - pattern: req.body
+      - pattern: req.body.$PROP
+      - pattern: req.query
+      - pattern: req.query.$PROP
+      - pattern: req.params
+      - pattern: req.params.$PROP
+      - pattern: req.body[...]
+      - pattern: req.query[...]
+      - pattern: req.params[...]
+      # Koa
+      - pattern: ctx.request.body
+      - pattern: ctx.request.body.$PROP
+      - pattern: ctx.query
+      - pattern: ctx.query.$PROP
+      # Fastify
+      - pattern: request.body
+      - pattern: request.body.$PROP
+      - pattern: request.query
+      - pattern: request.query.$PROP
+    pattern-sinks:
+      # Native MongoDB driver
+      - pattern: $COLL.find($QUERY, ...)
+      - pattern: $COLL.find($QUERY)
+      - pattern: $COLL.findOne($QUERY, ...)
+      - pattern: $COLL.findOne($QUERY)
+      - pattern: $COLL.findOneAndUpdate($QUERY, ...)
+      - pattern: $COLL.findOneAndDelete($QUERY, ...)
+      - pattern: $COLL.findOneAndReplace($QUERY, ...)
+      - pattern: $COLL.updateOne($QUERY, ...)
+      - pattern: $COLL.updateMany($QUERY, ...)
+      - pattern: $COLL.deleteOne($QUERY, ...)
+      - pattern: $COLL.deleteMany($QUERY, ...)
+      - pattern: $COLL.countDocuments($QUERY, ...)
+      - pattern: $COLL.aggregate($PIPELINE, ...)
+      # Mongoose
+      - pattern: $MODEL.find($QUERY, ...)
+      - pattern: $MODEL.find($QUERY)
+      - pattern: $MODEL.findOne($QUERY, ...)
+      - pattern: $MODEL.findOne($QUERY)
+      - pattern: $MODEL.findById($ID)
+      - pattern: $MODEL.findByIdAndUpdate($ID, ...)
+      - pattern: $MODEL.findByIdAndDelete($ID)
+      - pattern: $MODEL.findOneAndUpdate($QUERY, ...)
+      - pattern: $MODEL.findOneAndDelete($QUERY, ...)
+      - pattern: $MODEL.updateOne($QUERY, ...)
+      - pattern: $MODEL.updateMany($QUERY, ...)
+      - pattern: $MODEL.deleteOne($QUERY, ...)
+      - pattern: $MODEL.deleteMany($QUERY, ...)
+      - pattern: $MODEL.countDocuments($QUERY, ...)
+      - pattern: $MODEL.where($QUERY)
+    pattern-sanitizers:
+      # mongo-sanitize package
+      - pattern: sanitize(...)
+      - pattern: mongoSanitize(...)
+      # Type coercion
+      - pattern: String(...)
+      - pattern: Number(...)
+      - pattern: parseInt(...)
+      - pattern: parseFloat(...)
+      # Mongoose ObjectId validation
+      - pattern: mongoose.Types.ObjectId(...)
+      - pattern: new ObjectId(...)
+      - pattern: ObjectId.isValid(...)
+
+  # ---------------------------------------------------------------------------
+  # Java: MongoDB Driver NoSQL Injection
+  # ---------------------------------------------------------------------------
+  - id: java-mongodb-nosql-injection
+    mode: taint
+    paths:
+      exclude:
+        - "**/node_modules/**"
+        - "**/vendor/**"
+        - "**/dist/**"
+        - "**/build/**"
+        - "**/*.min.js"
+        - "**/*.min.mjs"
+        - "**/*.bundle.js"
+        - "**/*.chunk.js"
+        - "**/*.chunk.mjs"
+        - "**/*-init.mjs"
+    languages:
+      - java
+    message: |
+      User-controlled input flows to a MongoDB query. Attackers can inject query
+      operators via JSON/BSON parsing to bypass authentication or extract data.
+
+      Remediation:
+      - Use typed query builders (Filters.eq(), Filters.and()) instead of raw JSON
+      - Validate and sanitize all user input before query construction
+      - Use Document construction with explicit field names
+    severity: ERROR
+    metadata:
+      cwe: "CWE-943"
+      owasp:
+        - "A03:2021-Injection"
+      category: security
+      subcategory:
+        - vuln
+      confidence: HIGH
+      likelihood: MEDIUM
+      impact: HIGH
+      author: "threat-hunting"
+      references:
+        - https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/07-Input_Validation_Testing/05.6-Testing_for_NoSQL_Injection
+    pattern-sources:
+      # Servlet
+      - pattern: request.getParameter(...)
+      - pattern: request.getParameterValues(...)
+      - pattern: request.getInputStream()
+      - pattern: request.getReader()
+      # Spring MVC
+      - pattern: "@RequestParam(...) $TYPE $VAR"
+      - pattern: "@RequestBody $TYPE $VAR"
+      - pattern: "@PathVariable(...) $TYPE $VAR"
+      # JSON parsing
+      - pattern: (ObjectMapper $M).readValue(...)
+      - pattern: new ObjectMapper().readValue(...)
+      - pattern: JsonParser.parseString(...)
+    pattern-sinks:
+      # MongoDB Java Driver - raw query construction
+      - pattern: Document.parse($JSON)
+      - pattern: BsonDocument.parse($JSON)
+      - pattern: BasicDBObject.parse($JSON)
+      # Collection methods with Document/BasicDBObject
+      - pattern: $COLL.find($FILTER)
+      - pattern: $COLL.find($FILTER, ...)
+      - pattern: (MongoCollection $COLL).find($FILTER)
+      - pattern: $COLL.findOneAndUpdate($FILTER, ...)
+      - pattern: $COLL.findOneAndDelete($FILTER)
+      - pattern: $COLL.findOneAndReplace($FILTER, ...)
+      - pattern: $COLL.updateOne($FILTER, ...)
+      - pattern: $COLL.updateMany($FILTER, ...)
+      - pattern: $COLL.deleteOne($FILTER)
+      - pattern: $COLL.deleteMany($FILTER)
+      - pattern: $COLL.countDocuments($FILTER)
+      - pattern: $COLL.aggregate($PIPELINE)
+    pattern-sanitizers:
+      # Typed filter builders are safe
+      - pattern: Filters.eq(...)
+      - pattern: Filters.and(...)
+      - pattern: Filters.or(...)
+      - pattern: Filters.in(...)
+      - pattern: Filters.regex(...)
+      # Type validation
+      - pattern: Integer.parseInt(...)
+      - pattern: Long.parseLong(...)
+
+  # ---------------------------------------------------------------------------
+  # Go: MongoDB Driver NoSQL Injection
+  # ---------------------------------------------------------------------------
+  - id: go-mongodb-nosql-injection
+    mode: taint
+    paths:
+      exclude:
+        - "**/node_modules/**"
+        - "**/vendor/**"
+        - "**/dist/**"
+        - "**/build/**"
+        - "**/*.min.js"
+        - "**/*.min.mjs"
+        - "**/*.bundle.js"
+        - "**/*.chunk.js"
+        - "**/*.chunk.mjs"
+        - "**/*-init.mjs"
+    languages:
+      - go
+    message: |
+      User-controlled input flows to a MongoDB query. Attackers can inject
+      query operators via BSON unmarshaling to bypass authentication.
+
+      Remediation:
+      - Use bson.D{} or bson.M{} with explicit field construction
+      - Validate input types before query construction
+      - Avoid unmarshaling user JSON directly into query filters
+    severity: ERROR
+    metadata:
+      cwe: "CWE-943"
+      owasp:
+        - "A03:2021-Injection"
+      category: security
+      subcategory:
+        - vuln
+      confidence: HIGH
+      likelihood: MEDIUM
+      impact: HIGH
+      author: "threat-hunting"
+    pattern-sources:
+      # Gin
+      - pattern: c.Query(...)
+      - pattern: c.Param(...)
+      - pattern: c.PostForm(...)
+      - pattern: c.ShouldBindJSON(...)
+      - pattern: c.BindJSON(...)
+      # Standard http
+      - pattern: r.URL.Query().Get(...)
+      - pattern: r.FormValue(...)
+      - pattern: r.PostFormValue(...)
+      # JSON decoding
+      - pattern: json.Unmarshal(...)
+      - pattern: json.NewDecoder($R).Decode(...)
+    pattern-sinks:
+      # MongoDB Go driver
+      - pattern: $COLL.Find($CTX, $FILTER, ...)
+      - pattern: $COLL.Find($CTX, $FILTER)
+      - pattern: $COLL.FindOne($CTX, $FILTER, ...)
+      - pattern: $COLL.FindOne($CTX, $FILTER)
+      - pattern: $COLL.FindOneAndUpdate($CTX, $FILTER, ...)
+      - pattern: $COLL.FindOneAndDelete($CTX, $FILTER, ...)
+      - pattern: $COLL.FindOneAndReplace($CTX, $FILTER, ...)
+      - pattern: $COLL.UpdateOne($CTX, $FILTER, ...)
+      - pattern: $COLL.UpdateMany($CTX, $FILTER, ...)
+      - pattern: $COLL.DeleteOne($CTX, $FILTER, ...)
+      - pattern: $COLL.DeleteMany($CTX, $FILTER, ...)
+      - pattern: $COLL.CountDocuments($CTX, $FILTER, ...)
+      - pattern: $COLL.Aggregate($CTX, $PIPELINE, ...)
+      # BSON parsing
+      - pattern: bson.UnmarshalExtJSON(...)
+
+  # ---------------------------------------------------------------------------
+  # Ruby: MongoDB/Mongoid NoSQL Injection
+  # ---------------------------------------------------------------------------
+  - id: ruby-mongodb-nosql-injection
+    mode: taint
+    paths:
+      exclude:
+        - "**/node_modules/**"
+        - "**/vendor/**"
+        - "**/dist/**"
+        - "**/build/**"
+        - "**/*.min.js"
+        - "**/*.min.mjs"
+        - "**/*.bundle.js"
+        - "**/*.chunk.js"
+        - "**/*.chunk.mjs"
+        - "**/*-init.mjs"
+    languages:
+      - ruby
+    message: |
+      User-controlled input flows to a MongoDB query via Mongoid or mongo-ruby-driver.
+      Attackers can inject query operators to bypass authentication or extract data.
+
+      Remediation:
+      - Use Mongoid's type-safe query methods (where, find_by)
+      - Validate input types before constructing queries
+      - Sanitize hash keys to reject $ operators
+    severity: ERROR
+    metadata:
+      cwe: "CWE-943"
+      owasp:
+        - "A03:2021-Injection"
+      category: security
+      subcategory:
+        - vuln
+      confidence: HIGH
+      likelihood: MEDIUM
+      impact: HIGH
+      author: "threat-hunting"
+    pattern-sources:
+      # Rails / Sinatra (params works for both)
+      - pattern: params[...]
+      - pattern: params.fetch(...)
+      - pattern: params.permit(...)
+      - pattern: request.params[...]
+      - pattern: request.body
+      # JSON parsing
+      - pattern: JSON.parse(...)
+    pattern-sinks:
+      # Mongoid ODM
+      - pattern: $MODEL.where($QUERY)
+      - pattern: $MODEL.find_by($QUERY)
+      - pattern: $MODEL.find($QUERY)
+      - pattern: $MODEL.first($QUERY)
+      - pattern: $MODEL.any_of($QUERY)
+      - pattern: $MODEL.all_of($QUERY)
+      # mongo-ruby-driver
+      - pattern: $COLL.find($QUERY)
+      - pattern: $COLL.find_one($QUERY)
+      - pattern: $COLL.find_one_and_update($QUERY, ...)
+      - pattern: $COLL.find_one_and_delete($QUERY)
+      - pattern: $COLL.update_one($QUERY, ...)
+      - pattern: $COLL.update_many($QUERY, ...)
+      - pattern: $COLL.delete_one($QUERY)
+      - pattern: $COLL.delete_many($QUERY)
+      - pattern: $COLL.count_documents($QUERY)
+      - pattern: $COLL.aggregate($PIPELINE)
+    pattern-sanitizers:
+      # Type coercion
+      - pattern: $X.to_s
+      - pattern: $X.to_i
+      - pattern: Integer(...)
+      - pattern: String(...)
+      # BSON ObjectId
+      - pattern: BSON::ObjectId(...)
+      - pattern: BSON::ObjectId.from_string(...)
+
+  # ---------------------------------------------------------------------------
+  # Audit: Raw query string construction (all languages)
+  # ---------------------------------------------------------------------------
+  - id: mongodb-raw-query-string-audit
+    languages:
+      - python
+      - javascript
+      - typescript
+    message: |
+      MongoDB query constructed from string interpolation or concatenation.
+      This pattern is prone to injection if any part comes from user input.
+
+      Remediation:
+      - Use native query builder objects (dict/Document/bson.M)
+      - Never construct queries from string templates
+    severity: WARNING
+    metadata:
+      cwe: "CWE-943"
+      category: security
+      subcategory:
+        - audit
+      confidence: MEDIUM
+      likelihood: MEDIUM
+      impact: HIGH
+      author: "threat-hunting"
+    pattern-either:
+      # Python f-strings or format
+      - pattern: $COLL.find(f"...")
+      - pattern: $COLL.find_one(f"...")
+      - pattern: $COLL.find("...".format(...))
+      - pattern: $COLL.find("..." % ...)
+      # JavaScript template literals
+      - pattern: $COLL.find(`...`)
+      - pattern: $COLL.findOne(`...`)
+      - pattern: JSON.parse(`...${...}...`)
+      # String concatenation
+      - pattern: $COLL.find("..." + $X + "...")
+      - pattern: $COLL.findOne("..." + $X + "...")

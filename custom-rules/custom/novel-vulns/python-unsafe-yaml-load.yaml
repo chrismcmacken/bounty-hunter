@@ -1,0 +1,130 @@
+# Detect unsafe yaml.load() usage in Python
+# yaml.load() without a safe Loader allows arbitrary code execution via:
+#   !!python/object/apply:os.system ['id']
+#   !!python/object/apply:subprocess.check_output [['cat', '/etc/passwd']]
+---
+rules:
+  # Pattern 1: yaml.load() with no Loader argument (most dangerous)
+  - id: python-yaml-load-no-loader
+    languages:
+      - python
+    message: |
+      `yaml.load()` called without a Loader argument. In PyYAML < 5.1, this defaults to
+      the unsafe Loader which allows arbitrary Python code execution via YAML tags like
+      `!!python/object/apply:`. Even in newer versions, this usage is deprecated and
+      should use `yaml.safe_load()` or explicitly specify `Loader=yaml.SafeLoader`.
+
+      Exploit example:
+      ```yaml
+      !!python/object/apply:os.system ['id']
+      ```
+
+      Fix by using:
+      ```python
+      yaml.safe_load(data)
+      # or
+      yaml.load(data, Loader=yaml.SafeLoader)
+      ```
+    patterns:
+      - pattern-either:
+          - pattern: yaml.load($DATA)
+          - pattern: yaml.load_all($DATA)
+      - pattern-not: yaml.load($DATA, Loader=...)
+      - pattern-not: yaml.load_all($DATA, Loader=...)
+      - pattern-inside: |
+          import yaml
+          ...
+    metadata:
+      cwe: "CWE-502"
+      cwe_detail: "Deserialization of Untrusted Data"
+      owasp:
+        - "A8:2017-Insecure Deserialization"
+        - "A08:2021-Software and Data Integrity Failures"
+      category: security
+      confidence: HIGH
+      impact: HIGH
+      likelihood: HIGH
+      references:
+        - https://pyyaml.org/wiki/PyYAMLDocumentation
+        - https://blog.rubygems.org/2013/01/31/data-verification.html
+      shortDescription: "Unsafe YAML deserialization allows code execution"
+    severity: ERROR
+
+  # Pattern 2: yaml.load() with explicitly unsafe Loaders
+  - id: python-yaml-load-unsafe-loader
+    languages:
+      - python
+    message: |
+      `yaml.load()` called with an unsafe Loader (`Loader`, `UnsafeLoader`, `FullLoader`,
+      or `CLoader`). These loaders allow arbitrary Python code execution via YAML tags.
+
+      Exploit example:
+      ```yaml
+      !!python/object/apply:subprocess.check_output [['cat', '/etc/passwd']]
+      ```
+
+      Fix by using:
+      ```python
+      yaml.safe_load(data)
+      # or
+      yaml.load(data, Loader=yaml.SafeLoader)
+      ```
+    patterns:
+      - pattern-either:
+          - pattern: yaml.load($DATA, Loader=yaml.Loader)
+          - pattern: yaml.load($DATA, Loader=yaml.UnsafeLoader)
+          - pattern: yaml.load($DATA, Loader=yaml.FullLoader)
+          - pattern: yaml.load($DATA, Loader=yaml.CLoader)
+          - pattern: yaml.load_all($DATA, Loader=yaml.Loader)
+          - pattern: yaml.load_all($DATA, Loader=yaml.UnsafeLoader)
+          - pattern: yaml.load_all($DATA, Loader=yaml.FullLoader)
+          - pattern: yaml.load_all($DATA, Loader=yaml.CLoader)
+      - pattern-inside: |
+          import yaml
+          ...
+    metadata:
+      cwe: "CWE-502"
+      cwe_detail: "Deserialization of Untrusted Data"
+      owasp:
+        - "A8:2017-Insecure Deserialization"
+        - "A08:2021-Software and Data Integrity Failures"
+      category: security
+      confidence: HIGH
+      impact: HIGH
+      likelihood: MEDIUM
+      references:
+        - https://pyyaml.org/wiki/PyYAMLDocumentation
+      shortDescription: "Unsafe YAML Loader allows code execution"
+    severity: ERROR
+
+  # Pattern 3: yaml.unsafe_load() explicit function
+  - id: python-yaml-unsafe-load-function
+    languages:
+      - python
+    message: |
+      `yaml.unsafe_load()` explicitly allows arbitrary Python code execution.
+      This should never be used with untrusted input.
+
+      Fix by using:
+      ```python
+      yaml.safe_load(data)
+      ```
+    patterns:
+      - pattern-either:
+          - pattern: yaml.unsafe_load(...)
+          - pattern: yaml.unsafe_load_all(...)
+      - pattern-inside: |
+          import yaml
+          ...
+    metadata:
+      cwe: "CWE-502"
+      cwe_detail: "Deserialization of Untrusted Data"
+      owasp:
+        - "A8:2017-Insecure Deserialization"
+        - "A08:2021-Software and Data Integrity Failures"
+      category: security
+      confidence: HIGH
+      impact: HIGH
+      likelihood: HIGH
+      shortDescription: "Explicit unsafe YAML deserialization"
+    severity: ERROR

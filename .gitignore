@@ -1,0 +1,23 @@
+# Cloned repositories (large, not needed in version control)
+repos/
+
+# Environment variables (contains auth tokens)
+.env
+
+# Archives (large binary files)
+*.tar.gz
+*.zip
+*.rar
+*.7z
+
+# Extracted archive temp directories
+tmp-extract-*/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+*.swp
+*.swo
+*~

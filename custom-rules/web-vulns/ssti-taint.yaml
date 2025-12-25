@@ -1,0 +1,508 @@
+rules:
+  # =============================================================================
+  # Server-Side Template Injection (SSTI) Detection Rules
+  # =============================================================================
+  # Taint mode rules tracking user input to template rendering functions.
+  #
+  # NOTE: p/default covers some SSTI patterns. These rules add:
+  # - Framework-specific sources
+  # - Additional template engines (Twig, Velocity, Freemarker, etc.)
+  # - CVE-specific patterns (CVE-2024-6386 WPML Twig SSTI)
+  # =============================================================================
+
+  # ---------------------------------------------------------------------------
+  # Python: Flask/Jinja2 SSTI
+  # ---------------------------------------------------------------------------
+  - id: python-jinja2-ssti
+    mode: taint
+    paths:
+      exclude:
+        - "**/node_modules/**"
+        - "**/vendor/**"
+        - "**/dist/**"
+        - "**/build/**"
+        - "**/*.min.js"
+        - "**/*.min.mjs"
+        - "**/*.bundle.js"
+        - "**/*.chunk.js"
+        - "**/*.chunk.mjs"
+        - "**/*-init.mjs"
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [vuln]
+      confidence: HIGH
+      likelihood: HIGH
+      impact: HIGH
+      cwe: "CWE-1336: Improper Neutralization of Special Elements Used in a Template Engine"
+      owasp: "A03:2021 - Injection"
+      references:
+        - https://portswigger.net/research/server-side-template-injection
+    message: >-
+      User-controlled input is used as a Jinja2 template. This allows Server-Side
+      Template Injection (SSTI) leading to remote code execution. Use render_template()
+      with a static template file and pass data as context variables.
+    languages: [python]
+    severity: ERROR
+    pattern-sources:
+      # Flask
+      - pattern: request.args.get(...)
+      - pattern: request.args[...]
+      - pattern: request.form.get(...)
+      - pattern: request.form[...]
+      - pattern: request.json.get(...)
+      - pattern: request.json[...]
+      - pattern: request.data
+      - pattern: request.values.get(...)
+      # Django
+      - pattern: request.GET.get(...)
+      - pattern: request.GET[...]
+      - pattern: request.POST.get(...)
+      - pattern: request.POST[...]
+    pattern-sinks:
+      # Flask render_template_string (dangerous)
+      - pattern: render_template_string($TEMPLATE, ...)
+      # Jinja2 Template from string
+      - pattern: Template($TEMPLATE).render(...)
+      - pattern: jinja2.Template($TEMPLATE).render(...)
+      - pattern: Environment(...).from_string($TEMPLATE).render(...)
+      # Django Template (less common but possible)
+      - pattern: django.template.Template($TEMPLATE)
+    pattern-sanitizers:
+      # Using a file-based template is safe
+      - pattern: render_template($FILENAME, ...)
+
+  # ---------------------------------------------------------------------------
+  # Python: Mako SSTI
+  # ---------------------------------------------------------------------------
+  - id: python-mako-ssti
+    mode: taint
+    paths:
+      exclude:
+        - "**/node_modules/**"
+        - "**/vendor/**"
+        - "**/dist/**"
+        - "**/build/**"
+        - "**/*.min.js"
+        - "**/*.min.mjs"
+        - "**/*.bundle.js"
+        - "**/*.chunk.js"
+        - "**/*.chunk.mjs"
+        - "**/*-init.mjs"
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [vuln]
+      confidence: HIGH
+      likelihood: MEDIUM
+      impact: HIGH
+      cwe: "CWE-1336: Improper Neutralization of Special Elements Used in a Template Engine"
+    message: >-
+      User-controlled input is used as a Mako template. This allows SSTI
+      leading to remote code execution.
+    languages: [python]
+    severity: ERROR
+    pattern-sources:
+      - pattern: request.args.get(...)
+      - pattern: request.form.get(...)
+      - pattern: request.json.get(...)
+      - pattern: request.data
+    pattern-sinks:
+      # Only match explicit mako imports to avoid confusion with Jinja2 Template
+      - pattern: mako.template.Template($TEMPLATE).render(...)
+      - pattern: MakoTemplate($TEMPLATE).render(...)
+
+  # ---------------------------------------------------------------------------
+  # PHP: Twig SSTI (CVE-2024-6386 pattern)
+  # ---------------------------------------------------------------------------
+  - id: php-twig-ssti
+    mode: taint
+    paths:
+      exclude:
+        - "**/node_modules/**"
+        - "**/vendor/**"
+        - "**/dist/**"
+        - "**/build/**"
+        - "**/*.min.js"
+        - "**/*.min.mjs"
+        - "**/*.bundle.js"
+        - "**/*.chunk.js"
+        - "**/*.chunk.mjs"
+        - "**/*-init.mjs"
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [vuln]
+      confidence: HIGH
+      likelihood: HIGH
+      impact: HIGH
+      cwe: "CWE-1336: Improper Neutralization of Special Elements Used in a Template Engine"
+      cve: CVE-2024-6386
+      references:
+        - https://blog.wpsec.com/the-full-story-of-cve-2024-6386-remote-code-execution-in-wpml/
+        - https://sec.stealthcopter.com/wpml-rce-via-twig-ssti/
+    message: >-
+      User-controlled input is used as a Twig template. This allows SSTI
+      leading to RCE. See CVE-2024-6386 (WPML) for a real-world example.
+      Use file-based templates and pass data as context.
+    languages: [php]
+    severity: ERROR
+    pattern-sources:
+      - pattern: $_GET[...]
+      - pattern: $_POST[...]
+      - pattern: $_REQUEST[...]
+      - pattern: $request->input(...)
+      - pattern: $request->get(...)
+      # WordPress specific
+      - pattern: $_GET[$_]
+      - pattern: $_POST[$_]
+    pattern-sinks:
+      # Twig render from string
+      - pattern: $twig->createTemplate($TEMPLATE)
+      - pattern: $twig->createTemplate($TEMPLATE, ...)
+      # Direct render (rare but possible)
+      - pattern: $twig->render($TEMPLATE, ...)
+      # Twig Environment from string
+      - pattern: (new \Twig\Environment(...))->createTemplate($TEMPLATE)
+
+  # ---------------------------------------------------------------------------
+  # PHP: Blade SSTI (Laravel)
+  # ---------------------------------------------------------------------------
+  - id: php-blade-ssti
+    mode: taint
+    paths:
+      exclude:
+        - "**/node_modules/**"
+        - "**/vendor/**"
+        - "**/dist/**"
+        - "**/build/**"
+        - "**/*.min.js"
+        - "**/*.min.mjs"
+        - "**/*.bundle.js"
+        - "**/*.chunk.js"
+        - "**/*.chunk.mjs"
+        - "**/*-init.mjs"
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [vuln]
+      confidence: HIGH
+      likelihood: MEDIUM
+      impact: HIGH
+      cwe: "CWE-1336: Improper Neutralization of Special Elements Used in a Template Engine"
+    message: >-
+      User-controlled input is used in Blade::compileString(). This can lead
+      to SSTI if the compiled template is rendered.
+    languages: [php]
+    severity: ERROR
+    pattern-sources:
+      - pattern: $_GET[...]
+      - pattern: $_POST[...]
+      - pattern: $request->input(...)
+    pattern-sinks:
+      # Only compileString is dangerous - view()->make() with static view names is safe
+      - pattern: Blade::compileString($TEMPLATE)
+
+  # ---------------------------------------------------------------------------
+  # JavaScript: EJS/Pug SSTI
+  # ---------------------------------------------------------------------------
+  - id: nodejs-ejs-ssti
+    mode: taint
+    paths:
+      exclude:
+        - "**/node_modules/**"
+        - "**/vendor/**"
+        - "**/dist/**"
+        - "**/build/**"
+        - "**/*.min.js"
+        - "**/*.min.mjs"
+        - "**/*.bundle.js"
+        - "**/*.chunk.js"
+        - "**/*.chunk.mjs"
+        - "**/*-init.mjs"
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [vuln]
+      confidence: HIGH
+      likelihood: HIGH
+      impact: HIGH
+      cwe: "CWE-1336: Improper Neutralization of Special Elements Used in a Template Engine"
+    message: >-
+      User-controlled input is used as an EJS template. This allows SSTI
+      leading to remote code execution. Use file-based templates.
+    languages: [javascript, typescript]
+    severity: ERROR
+    pattern-sources:
+      - pattern: req.body.$PROP
+      - pattern: req.query.$PROP
+      - pattern: req.params.$PROP
+      - pattern: req.body[...]
+      - pattern: req.query[...]
+    pattern-sinks:
+      - pattern: ejs.render($TEMPLATE, ...)
+      - pattern: ejs.compile($TEMPLATE)(...)
+
+  - id: nodejs-pug-ssti
+    mode: taint
+    paths:
+      exclude:
+        - "**/node_modules/**"
+        - "**/vendor/**"
+        - "**/dist/**"
+        - "**/build/**"
+        - "**/*.min.js"
+        - "**/*.min.mjs"
+        - "**/*.bundle.js"
+        - "**/*.chunk.js"
+        - "**/*.chunk.mjs"
+        - "**/*-init.mjs"
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [vuln]
+      confidence: HIGH
+      likelihood: HIGH
+      impact: HIGH
+      cwe: "CWE-1336: Improper Neutralization of Special Elements Used in a Template Engine"
+    message: >-
+      User-controlled input is used as a Pug template. This allows SSTI
+      leading to remote code execution.
+    languages: [javascript, typescript]
+    severity: ERROR
+    pattern-sources:
+      - pattern: req.body.$PROP
+      - pattern: req.query.$PROP
+      - pattern: req.params.$PROP
+    pattern-sinks:
+      - pattern: pug.render($TEMPLATE, ...)
+      - pattern: pug.compile($TEMPLATE)(...)
+
+  - id: nodejs-handlebars-ssti
+    mode: taint
+    paths:
+      exclude:
+        - "**/node_modules/**"
+        - "**/vendor/**"
+        - "**/dist/**"
+        - "**/build/**"
+        - "**/*.min.js"
+        - "**/*.min.mjs"
+        - "**/*.bundle.js"
+        - "**/*.chunk.js"
+        - "**/*.chunk.mjs"
+        - "**/*-init.mjs"
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [vuln]
+      confidence: MEDIUM
+      likelihood: MEDIUM
+      impact: HIGH
+      cwe: "CWE-1336: Improper Neutralization of Special Elements Used in a Template Engine"
+    message: >-
+      User-controlled input is used as a Handlebars template. While Handlebars
+      is sandboxed, custom helpers could enable code execution.
+    languages: [javascript, typescript]
+    severity: WARNING
+    pattern-sources:
+      - pattern: req.body.$PROP
+      - pattern: req.query.$PROP
+    pattern-sinks:
+      - pattern: Handlebars.compile($TEMPLATE)(...)
+      - pattern: handlebars.compile($TEMPLATE)(...)
+
+  # ---------------------------------------------------------------------------
+  # Java: Velocity SSTI
+  # ---------------------------------------------------------------------------
+  - id: java-velocity-ssti
+    mode: taint
+    paths:
+      exclude:
+        - "**/node_modules/**"
+        - "**/vendor/**"
+        - "**/dist/**"
+        - "**/build/**"
+        - "**/*.min.js"
+        - "**/*.min.mjs"
+        - "**/*.bundle.js"
+        - "**/*.chunk.js"
+        - "**/*.chunk.mjs"
+        - "**/*-init.mjs"
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [vuln]
+      confidence: HIGH
+      likelihood: HIGH
+      impact: HIGH
+      cwe: "CWE-1336: Improper Neutralization of Special Elements Used in a Template Engine"
+      references:
+        - https://portswigger.net/research/server-side-template-injection
+    message: >-
+      User-controlled input is used as a Velocity template. This allows SSTI
+      leading to remote code execution via #set, #include, or ClassLoader access.
+    languages: [java]
+    severity: ERROR
+    pattern-sources:
+      - pattern: request.getParameter(...)
+      - pattern: "@RequestParam(...) String $VAR"
+      - pattern: "@RequestBody $TYPE $VAR"
+    pattern-sinks:
+      - pattern: Velocity.evaluate($CTX, $WRITER, $TAG, $TEMPLATE)
+      - pattern: velocityEngine.evaluate($CTX, $WRITER, $TAG, $TEMPLATE)
+
+  # ---------------------------------------------------------------------------
+  # Java: Freemarker SSTI
+  # ---------------------------------------------------------------------------
+  - id: java-freemarker-ssti
+    mode: taint
+    paths:
+      exclude:
+        - "**/node_modules/**"
+        - "**/vendor/**"
+        - "**/dist/**"
+        - "**/build/**"
+        - "**/*.min.js"
+        - "**/*.min.mjs"
+        - "**/*.bundle.js"
+        - "**/*.chunk.js"
+        - "**/*.chunk.mjs"
+        - "**/*-init.mjs"
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [vuln]
+      confidence: HIGH
+      likelihood: HIGH
+      impact: HIGH
+      cwe: "CWE-1336: Improper Neutralization of Special Elements Used in a Template Engine"
+    message: >-
+      User-controlled input is used as a Freemarker template. This allows SSTI
+      leading to remote code execution.
+    languages: [java]
+    severity: ERROR
+    pattern-sources:
+      - pattern: request.getParameter(...)
+      - pattern: "@RequestParam(...) String $VAR"
+    pattern-sinks:
+      - pattern: new Template($NAME, new StringReader($TEMPLATE), $CFG)
+      - pattern: Template.getPlainTextTemplate($NAME, $TEMPLATE, $CFG)
+
+  # ---------------------------------------------------------------------------
+  # Java: Thymeleaf SSTI
+  # ---------------------------------------------------------------------------
+  - id: java-thymeleaf-ssti
+    mode: taint
+    paths:
+      exclude:
+        - "**/node_modules/**"
+        - "**/vendor/**"
+        - "**/dist/**"
+        - "**/build/**"
+        - "**/*.min.js"
+        - "**/*.min.mjs"
+        - "**/*.bundle.js"
+        - "**/*.chunk.js"
+        - "**/*.chunk.mjs"
+        - "**/*-init.mjs"
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [vuln]
+      confidence: HIGH
+      likelihood: MEDIUM
+      impact: HIGH
+      cwe: "CWE-1336: Improper Neutralization of Special Elements Used in a Template Engine"
+    message: >-
+      User-controlled input is used as a Thymeleaf template. This allows SSTI
+      if preprocessing is enabled or expressions are not properly restricted.
+    languages: [java]
+    severity: ERROR
+    pattern-sources:
+      - pattern: request.getParameter(...)
+      - pattern: "@RequestParam(...) String $VAR"
+    pattern-sinks:
+      - pattern: templateEngine.process($TEMPLATE, $CTX)
+      - pattern: templateEngine.processThrottled($TEMPLATE, ...)
+
+  # ---------------------------------------------------------------------------
+  # Ruby: ERB SSTI
+  # ---------------------------------------------------------------------------
+  - id: ruby-erb-ssti
+    mode: taint
+    paths:
+      exclude:
+        - "**/node_modules/**"
+        - "**/vendor/**"
+        - "**/dist/**"
+        - "**/build/**"
+        - "**/*.min.js"
+        - "**/*.min.mjs"
+        - "**/*.bundle.js"
+        - "**/*.chunk.js"
+        - "**/*.chunk.mjs"
+        - "**/*-init.mjs"
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [vuln]
+      confidence: HIGH
+      likelihood: HIGH
+      impact: HIGH
+      cwe: "CWE-1336: Improper Neutralization of Special Elements Used in a Template Engine"
+    message: >-
+      User-controlled input is used as an ERB template. This allows SSTI
+      leading to remote code execution.
+    languages: [ruby]
+    severity: ERROR
+    pattern-sources:
+      - pattern: params[...]
+      - pattern: params.fetch(...)
+      - pattern: request.params[...]
+    pattern-sinks:
+      - pattern: ERB.new($TEMPLATE).result(...)
+      - pattern: ERB.new($TEMPLATE, ...).result(...)
+
+  # ---------------------------------------------------------------------------
+  # Go: html/template and text/template SSTI
+  # ---------------------------------------------------------------------------
+  - id: go-template-ssti
+    mode: taint
+    paths:
+      exclude:
+        - "**/node_modules/**"
+        - "**/vendor/**"
+        - "**/dist/**"
+        - "**/build/**"
+        - "**/*.min.js"
+        - "**/*.min.mjs"
+        - "**/*.bundle.js"
+        - "**/*.chunk.js"
+        - "**/*.chunk.mjs"
+        - "**/*-init.mjs"
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [vuln]
+      confidence: HIGH
+      likelihood: MEDIUM
+      impact: HIGH
+      cwe: "CWE-1336: Improper Neutralization of Special Elements Used in a Template Engine"
+    message: >-
+      User-controlled input is used as a Go template string. text/template
+      allows arbitrary method calls; html/template only escapes HTML.
+    languages: [go]
+    severity: ERROR
+    pattern-sources:
+      - pattern: r.URL.Query().Get(...)
+      - pattern: r.FormValue(...)
+      - pattern: r.PostFormValue(...)
+      - pattern: c.Query(...)
+      - pattern: c.Param(...)
+    pattern-sinks:
+      # text/template (more dangerous)
+      - pattern: template.New($NAME).Parse($TEMPLATE)
+      - pattern: template.Must(template.New($NAME).Parse($TEMPLATE))
+      # html/template
+      - pattern: html_template.New($NAME).Parse($TEMPLATE)

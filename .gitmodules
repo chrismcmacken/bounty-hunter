@@ -1,0 +1,6 @@
+[submodule "custom-rules/0xdea-semgrep-rules"]
+	path = custom-rules/0xdea-semgrep-rules
+	url = https://github.com/0xdea/semgrep-rules
+[submodule "custom-rules/open-semgrep-rules"]
+	path = custom-rules/open-semgrep-rules
+	url = https://github.com/patched-codes/semgrep-rules

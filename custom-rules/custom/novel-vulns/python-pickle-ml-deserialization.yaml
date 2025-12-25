@@ -1,0 +1,311 @@
+rules:
+  # =============================================================================
+  # Python Pickle Deserialization - ML/Data Science Patterns
+  # =============================================================================
+  # Covers pickle usage patterns commonly missed by standard rules:
+  # - ML libraries (joblib, torch, numpy, pandas)
+  # - Base64 encoded pickle payloads
+  # - Import aliases
+  # - Less common pickle variants
+  # =============================================================================
+
+  # ---------------------------------------------------------------------------
+  # TAINT MODE: User input → ML pickle sinks (HIGH confidence)
+  # ---------------------------------------------------------------------------
+  - id: python-ml-pickle-deserialization-taint
+    mode: taint
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [vuln]
+      confidence: HIGH
+      likelihood: HIGH
+      impact: HIGH
+      cwe: "CWE-502: Deserialization of Untrusted Data"
+      owasp: "A08:2021 - Software and Data Integrity Failures"
+      references:
+        - https://docs.python.org/3/library/pickle.html
+        - https://pytorch.org/docs/stable/generated/torch.load.html
+        - https://joblib.readthedocs.io/en/latest/persistence.html
+        - https://blog.trailofbits.com/2021/03/15/never-a-dhat-moment-safe-deserialization-in-python/
+    message: >-
+      User-controlled input flows to a pickle-based deserializer commonly used
+      in ML/data science. Attackers can craft malicious pickle payloads to achieve
+      remote code execution. torch.load(), joblib.load(), and numpy.load() all use
+      pickle internally. Use safe alternatives or validate input sources strictly.
+    languages: [python]
+    severity: ERROR
+    pattern-sources:
+      # Flask
+      - pattern: request.args.get(...)
+      - pattern: request.form.get(...)
+      - pattern: request.json
+      - pattern: request.data
+      - pattern: request.files[...]
+      - pattern: request.get_data(...)
+      # Django
+      - pattern: request.GET.get(...)
+      - pattern: request.POST.get(...)
+      - pattern: request.body
+      - pattern: request.FILES[...]
+      # FastAPI
+      - pattern: await request.body()
+      - pattern: await request.json()
+      # Generic file/network input
+      - pattern: open(...).read()
+      - pattern: urlopen(...).read()
+      - pattern: requests.get(...).content
+      - pattern: requests.post(...).content
+      - pattern: urllib.request.urlopen(...).read()
+      # Base64 decoded data (common for pickle payloads)
+      - pattern: base64.b64decode(...)
+      - pattern: base64.decodebytes(...)
+      - pattern: codecs.decode(..., "base64")
+    pattern-sinks:
+      # PyTorch - major ML framework
+      - pattern: torch.load($DATA)
+      - pattern: torch.load($DATA, ...)
+      # joblib - sklearn model persistence
+      - pattern: joblib.load($DATA)
+      - pattern: joblib.load($DATA, ...)
+      # NumPy with pickle enabled
+      - pattern: numpy.load($DATA, allow_pickle=True)
+      - pattern: np.load($DATA, allow_pickle=True)
+      - pattern: numpy.load($DATA, allow_pickle=True, ...)
+      - pattern: np.load($DATA, allow_pickle=True, ...)
+      # pandas read_pickle
+      - pattern: pandas.read_pickle($DATA)
+      - pattern: pd.read_pickle($DATA)
+      # pickle module - direct imports
+      - pattern: loads($DATA)
+      - pattern: load($DATA)
+      # Unpickler class
+      - pattern: Unpickler($DATA).load()
+      - pattern: pickle.Unpickler($DATA).load()
+
+  # ---------------------------------------------------------------------------
+  # PyTorch torch.load() - Always dangerous without weights_only=True
+  # ---------------------------------------------------------------------------
+  - id: python-torch-load-unsafe
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [vuln]
+      confidence: HIGH
+      likelihood: MEDIUM
+      impact: HIGH
+      cwe: "CWE-502: Deserialization of Untrusted Data"
+      references:
+        - https://pytorch.org/docs/stable/generated/torch.load.html
+        - https://pytorch.org/docs/stable/notes/security.html
+    message: >-
+      torch.load() uses pickle internally and can execute arbitrary code.
+      If loading untrusted model files, use weights_only=True (PyTorch 1.13+)
+      or torch.jit.load() for TorchScript models. Never load models from
+      untrusted sources without validation.
+    languages: [python]
+    severity: WARNING
+    patterns:
+      - pattern: torch.load($PATH)
+      - pattern-not: torch.load($PATH, weights_only=True)
+      - pattern-not: torch.load($PATH, weights_only=True, ...)
+      - pattern-not: torch.load(..., map_location=..., weights_only=True)
+      # Exclude obvious safe patterns
+      - pattern-not-inside: |
+          if os.path.exists($TRUSTED_PATH):
+              ...
+              torch.load($TRUSTED_PATH)
+
+  # ---------------------------------------------------------------------------
+  # joblib.load() - sklearn model deserialization
+  # ---------------------------------------------------------------------------
+  - id: python-joblib-load-audit
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [audit]
+      confidence: MEDIUM
+      likelihood: MEDIUM
+      impact: HIGH
+      cwe: "CWE-502: Deserialization of Untrusted Data"
+      references:
+        - https://joblib.readthedocs.io/en/latest/persistence.html
+    message: >-
+      joblib.load() uses pickle for deserialization. Loading untrusted .pkl
+      or .joblib files can lead to arbitrary code execution. Verify the source
+      of model files before loading. Consider using ONNX or other safe formats
+      for model interchange.
+    languages: [python]
+    severity: WARNING
+    pattern-either:
+      - pattern: joblib.load(...)
+      - pattern: sklearn.externals.joblib.load(...)
+
+  # ---------------------------------------------------------------------------
+  # NumPy load with allow_pickle=True
+  # ---------------------------------------------------------------------------
+  - id: python-numpy-allow-pickle
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [vuln]
+      confidence: HIGH
+      likelihood: MEDIUM
+      impact: HIGH
+      cwe: "CWE-502: Deserialization of Untrusted Data"
+      references:
+        - https://numpy.org/doc/stable/reference/generated/numpy.load.html
+    message: >-
+      numpy.load() with allow_pickle=True enables pickle deserialization.
+      Loading .npy/.npz files from untrusted sources can lead to RCE.
+      Only use allow_pickle=True for trusted data sources.
+    languages: [python]
+    severity: WARNING
+    pattern-either:
+      - pattern: numpy.load(..., allow_pickle=True)
+      - pattern: numpy.load(..., allow_pickle=True, ...)
+      - pattern: np.load(..., allow_pickle=True)
+      - pattern: np.load(..., allow_pickle=True, ...)
+
+  # ---------------------------------------------------------------------------
+  # pandas read_pickle - Always uses pickle
+  # ---------------------------------------------------------------------------
+  - id: python-pandas-read-pickle-audit
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [audit]
+      confidence: MEDIUM
+      likelihood: MEDIUM
+      impact: HIGH
+      cwe: "CWE-502: Deserialization of Untrusted Data"
+      references:
+        - https://pandas.pydata.org/docs/reference/api/pandas.read_pickle.html
+    message: >-
+      pandas.read_pickle() deserializes using pickle. Loading pickle files
+      from untrusted sources can lead to arbitrary code execution. Use
+      safer formats like CSV, Parquet, or Feather for data interchange.
+    languages: [python]
+    severity: WARNING
+    pattern-either:
+      - pattern: pandas.read_pickle(...)
+      - pattern: pd.read_pickle(...)
+
+  # ---------------------------------------------------------------------------
+  # Base64 decode → pickle.loads chain (common attack pattern)
+  # ---------------------------------------------------------------------------
+  - id: python-base64-pickle-chain
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [vuln]
+      confidence: HIGH
+      likelihood: HIGH
+      impact: HIGH
+      cwe: "CWE-502: Deserialization of Untrusted Data"
+      references:
+        - https://blog.netspi.com/exploiting-python-pickle/
+    message: >-
+      Base64 decoded data is passed to pickle deserialization. This is a
+      common attack pattern where malicious pickle payloads are base64
+      encoded to bypass input filters. Ensure the source data is trusted.
+    languages: [python]
+    severity: ERROR
+    patterns:
+      - pattern-either:
+          - pattern: pickle.loads(base64.b64decode($DATA))
+          - pattern: pickle.loads(base64.decodebytes($DATA))
+          - pattern: |
+              $DECODED = base64.b64decode($DATA)
+              ...
+              pickle.loads($DECODED)
+          - pattern: |
+              $DECODED = base64.b64decode($DATA)
+              ...
+              pickle.load($DECODED)
+
+  # ---------------------------------------------------------------------------
+  # Direct import aliases (from pickle import loads)
+  # ---------------------------------------------------------------------------
+  - id: python-pickle-import-alias
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [audit]
+      confidence: MEDIUM
+      likelihood: MEDIUM
+      impact: HIGH
+      cwe: "CWE-502: Deserialization of Untrusted Data"
+    message: >-
+      Direct import of pickle functions detected. When 'loads' or 'load' are
+      imported directly from pickle, static analysis may miss dangerous usage.
+      Review all calls to these functions for untrusted input.
+    languages: [python]
+    severity: WARNING
+    patterns:
+      - pattern-either:
+          - pattern: from pickle import loads
+          - pattern: from pickle import load
+          - pattern: from pickle import loads, ...
+          - pattern: from pickle import load, ...
+          - pattern: from pickle import Unpickler
+          - pattern: from _pickle import loads
+          - pattern: from _pickle import load
+          - pattern: from cPickle import loads
+          - pattern: from cPickle import load
+
+  # ---------------------------------------------------------------------------
+  # Keras/TensorFlow model loading (uses pickle for Lambda layers)
+  # ---------------------------------------------------------------------------
+  - id: python-keras-model-load-audit
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [audit]
+      confidence: MEDIUM
+      likelihood: LOW
+      impact: HIGH
+      cwe: "CWE-502: Deserialization of Untrusted Data"
+      references:
+        - https://keras.io/api/models/model_saving_apis/
+    message: >-
+      Keras model loading can execute arbitrary code when models contain
+      Lambda layers or custom objects. Loading models from untrusted sources
+      is dangerous. Use safe_mode=True (Keras 3+) or verify model sources.
+    languages: [python]
+    severity: INFO
+    pattern-either:
+      - pattern: keras.models.load_model(...)
+      - pattern: tf.keras.models.load_model(...)
+      - pattern: load_model(...)
+
+  # ---------------------------------------------------------------------------
+  # Hugging Face transformers - can load pickle
+  # ---------------------------------------------------------------------------
+  - id: python-transformers-from-pretrained-audit
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [audit]
+      confidence: LOW
+      likelihood: LOW
+      impact: HIGH
+      cwe: "CWE-502: Deserialization of Untrusted Data"
+      references:
+        - https://huggingface.co/docs/transformers/main_classes/model
+    message: >-
+      Loading Hugging Face models from untrusted repositories could be
+      dangerous as some models may contain pickle files. Prefer using
+      safetensors format and trusted model sources (official HF Hub).
+    languages: [python]
+    severity: INFO
+    patterns:
+      - pattern-either:
+          - pattern: $MODEL.from_pretrained($PATH)
+          - pattern: AutoModel.from_pretrained($PATH)
+          - pattern: AutoTokenizer.from_pretrained($PATH)
+      - pattern-not: $MODEL.from_pretrained($PATH, use_safetensors=True)
+      - metavariable-regex:
+          metavariable: $PATH
+          # Flag non-standard hub paths (local or custom URLs)
+          regex: "^['\"](?!facebook/|google/|microsoft/|openai/|meta-llama/).*['\"]$"

@@ -1,0 +1,18 @@
+{
+  "name": "blockopensource",
+  "platform": "bugcrowd",
+  "github_orgs": [
+    "afterpay",
+    "cashapp",
+    "square"
+  ],
+  "program_url": "",
+  "scope": {
+    "in_scope": [],
+    "out_of_scope": []
+  },
+  "added_date": "2025-12-21",
+  "notes": "",
+  "status": "archived",
+  "archived_date": "2025-12-23"
+}

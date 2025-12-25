@@ -1,0 +1,14 @@
+{
+  "name": "phpbb",
+  "platform": "hackerone",
+  "github_org": "phpbb",
+  "program_url": "",
+  "scope": {
+    "in_scope": [],
+    "out_of_scope": []
+  },
+  "added_date": "2025-12-22",
+  "status": "archived",
+  "notes": "",
+  "archived_date": "2025-12-22"
+}

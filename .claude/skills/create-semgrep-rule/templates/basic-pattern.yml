@@ -1,0 +1,42 @@
+# Basic Pattern-Based Rule Template
+#
+# Use for: Single dangerous function calls, hardcoded values, insecure API usage
+# Copy this file and modify for your specific vulnerability pattern
+#
+rules:
+  - id: CHANGEME-vuln-type-description
+    languages:
+      - python  # Change to target language
+    message: |
+      CHANGEME: Clear description of what was detected and why it's dangerous.
+
+      Example: Detected use of eval() with potentially user-controlled input.
+      This could allow arbitrary code execution if an attacker can control the input.
+
+      Remediation: CHANGEME - Specific fix recommendation
+    severity: ERROR  # ERROR (exploitable), WARNING (likely vuln), INFO (audit)
+    metadata:
+      cwe: "CWE-XX"  # CHANGEME: Add correct CWE ID
+      owasp:
+        - "A03:2021-Injection"  # CHANGEME: Add relevant OWASP reference
+      category: security
+      confidence: HIGH  # HIGH, MEDIUM, LOW - be honest about FP rate
+      likelihood: HIGH
+      impact: HIGH
+      author: "CHANGEME"
+      references:
+        - https://cwe.mitre.org/data/definitions/XX.html
+    patterns:
+      # Match the dangerous pattern
+      - pattern-either:
+          - pattern: dangerous_function($ARG)
+          - pattern: other_dangerous_function($ARG)
+
+      # CRITICAL: Add exclusions to reduce false positives
+      - pattern-not: $FUNC("...", ...)  # Exclude hardcoded strings
+      - pattern-not: safe_wrapper(...)   # Exclude known safe wrappers
+
+      # Exclude safe contexts
+      - pattern-not-inside: |
+          if validate($INPUT):
+              ...

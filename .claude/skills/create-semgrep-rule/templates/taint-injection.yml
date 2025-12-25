@@ -1,0 +1,92 @@
+# Taint Mode Rule Template - Injection Vulnerabilities
+#
+# Use for: SQLi, XSS, Command Injection, SSRF, Path Traversal
+# Tracks data flow from user input (source) to dangerous function (sink)
+#
+rules:
+  - id: CHANGEME-injection-type-taint
+    mode: taint
+    languages:
+      - python  # Change to target language
+    message: |
+      CHANGEME: User input flows to <dangerous sink> without proper sanitization.
+
+      Example: User-controlled input from request parameters flows directly to
+      a SQL query, allowing SQL injection attacks.
+
+      Remediation: CHANGEME - Use parameterized queries, escape input, etc.
+    severity: ERROR
+    metadata:
+      cwe: "CWE-XX"  # CHANGEME: CWE-89 (SQLi), CWE-78 (CMDi), CWE-79 (XSS)
+      owasp:
+        - "A03:2021-Injection"
+      category: security
+      confidence: HIGH
+      likelihood: HIGH
+      impact: HIGH
+      author: "CHANGEME"
+      references:
+        - https://cwe.mitre.org/data/definitions/XX.html
+
+    # SOURCES: Where tainted (user-controlled) data enters
+    # Add all input sources relevant to your target
+    pattern-sources:
+      # Flask
+      - pattern: request.args[...]
+      - pattern: request.args.get(...)
+      - pattern: request.form[...]
+      - pattern: request.form.get(...)
+      - pattern: request.json[...]
+      - pattern: request.data
+      - pattern: request.files[...]
+
+      # Django
+      - pattern: request.GET[...]
+      - pattern: request.GET.get(...)
+      - pattern: request.POST[...]
+      - pattern: request.POST.get(...)
+
+      # Generic
+      - pattern: input(...)
+      - pattern: sys.argv[...]
+
+    # SINKS: Where tainted data causes harm
+    # CHANGEME: Add sinks for your vulnerability type
+    pattern-sinks:
+      # SQL Injection sinks
+      - pattern: $CURSOR.execute($QUERY, ...)
+        focus-metavariable: $QUERY
+      - pattern: $CURSOR.executemany($QUERY, ...)
+        focus-metavariable: $QUERY
+      - pattern: $DB.execute($QUERY)
+        focus-metavariable: $QUERY
+
+      # Command Injection sinks (uncomment if needed)
+      # - pattern: os.system($CMD)
+      # - pattern: os.popen($CMD)
+      # - pattern: subprocess.call($CMD, shell=True, ...)
+      # - pattern: subprocess.Popen($CMD, shell=True, ...)
+
+      # XSS sinks (uncomment if needed)
+      # - pattern: Markup($HTML)
+      # - pattern: render_template_string($TEMPLATE)
+
+    # SANITIZERS: Functions that make data safe
+    # CHANGEME: Add sanitizers used in your target codebase
+    pattern-sanitizers:
+      # Type conversion (safe for SQLi if expecting int)
+      - pattern: int(...)
+      - pattern: float(...)
+      - pattern: bool(...)
+
+      # Escaping functions
+      - pattern: escape(...)
+      - pattern: quote(...)
+      - pattern: sanitize(...)
+
+      # Parameterized queries (the tuple makes it safe)
+      - pattern: $CURSOR.execute("...", (...))
+
+      # Framework sanitizers
+      - pattern: bleach.clean(...)
+      - pattern: markupsafe.escape(...)

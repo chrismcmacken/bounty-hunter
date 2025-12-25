@@ -1,0 +1,383 @@
+rules:
+  # =============================================================================
+  # Insecure Deserialization Detection Rules
+  # =============================================================================
+  # Two approaches:
+  # 1. TAINT MODE (HIGH confidence) - User input flows to deserialization
+  # 2. AUDIT MODE (MEDIUM confidence) - Any use of dangerous deserializers
+  #
+  # NOTE: p/default covers many basic patterns. These rules add:
+  # - Taint tracking from web framework sources
+  # - Additional deserializers (dill, cloudpickle, etc.)
+  # - Framework-specific patterns
+  # =============================================================================
+
+  # ===========================================================================
+  # TAINT MODE RULES - High Confidence (user input → deserializer)
+  # ===========================================================================
+
+  # ---------------------------------------------------------------------------
+  # Python: User input to pickle/yaml/etc
+  # ---------------------------------------------------------------------------
+  - id: python-deserialization-taint
+    mode: taint
+    paths:
+      exclude:
+        - "**/node_modules/**"
+        - "**/vendor/**"
+        - "**/dist/**"
+        - "**/build/**"
+        - "**/*.min.js"
+        - "**/*.min.mjs"
+        - "**/*.bundle.js"
+        - "**/*.chunk.js"
+        - "**/*.chunk.mjs"
+        - "**/*-init.mjs"
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [vuln]
+      confidence: HIGH
+      likelihood: HIGH
+      impact: HIGH
+      cwe: "CWE-502: Deserialization of Untrusted Data"
+      owasp: "A08:2021 - Software and Data Integrity Failures"
+      references:
+        - https://docs.python.org/3/library/pickle.html
+        - https://pyyaml.org/wiki/PyYAMLDocumentation
+    message: >-
+      User-controlled input is deserialized using an unsafe deserializer.
+      This can lead to remote code execution. Use safe alternatives like
+      json.loads() or yaml.safe_load().
+    languages: [python]
+    severity: ERROR
+    pattern-sources:
+      # Flask
+      - pattern: request.args.get(...)
+      - pattern: request.form.get(...)
+      - pattern: request.json
+      - pattern: request.data
+      - pattern: request.files[...]
+      # Django
+      - pattern: request.GET.get(...)
+      - pattern: request.POST.get(...)
+      - pattern: request.body
+      # FastAPI
+      - pattern: await request.body()
+      - pattern: await request.json()
+    pattern-sinks:
+      # pickle
+      - pattern: pickle.loads($DATA)
+      - pattern: pickle.load($FILE)
+      - pattern: cPickle.loads($DATA)
+      - pattern: _pickle.loads($DATA)
+      # dill (pickle alternative)
+      - pattern: dill.loads($DATA)
+      - pattern: dill.load($FILE)
+      # cloudpickle
+      - pattern: cloudpickle.loads($DATA)
+      # PyYAML unsafe
+      - pattern: yaml.load($DATA)
+      - pattern: yaml.unsafe_load($DATA)
+      - pattern: yaml.full_load($DATA)
+      # marshal
+      - pattern: marshal.loads($DATA)
+      # shelve
+      - pattern: shelve.open($PATH)
+    pattern-sanitizers:
+      - pattern: yaml.safe_load($DATA)
+      - pattern: yaml.load($DATA, Loader=yaml.SafeLoader)
+      - pattern: json.loads($DATA)
+
+  # ---------------------------------------------------------------------------
+  # Java: User input to ObjectInputStream/XMLDecoder/SnakeYAML
+  # ---------------------------------------------------------------------------
+  - id: java-deserialization-taint
+    mode: taint
+    paths:
+      exclude:
+        - "**/node_modules/**"
+        - "**/vendor/**"
+        - "**/dist/**"
+        - "**/build/**"
+        - "**/*.min.js"
+        - "**/*.min.mjs"
+        - "**/*.bundle.js"
+        - "**/*.chunk.js"
+        - "**/*.chunk.mjs"
+        - "**/*-init.mjs"
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [vuln]
+      confidence: HIGH
+      likelihood: HIGH
+      impact: HIGH
+      cwe: "CWE-502: Deserialization of Untrusted Data"
+      cve: CVE-2024-28986
+      references:
+        - https://cheatsheetseries.owasp.org/cheatsheets/Deserialization_Cheat_Sheet.html
+    message: >-
+      User-controlled input is deserialized. This can lead to remote code execution.
+      Use look-ahead deserialization or a safer format like JSON.
+    languages: [java]
+    severity: ERROR
+    pattern-sources:
+      - pattern: request.getParameter(...)
+      - pattern: request.getInputStream()
+      - pattern: request.getReader()
+      - pattern: "@RequestBody $TYPE $VAR"
+      - pattern: "@RequestParam(...) $TYPE $VAR"
+    pattern-sinks:
+      # ObjectInputStream
+      - pattern: (ObjectInputStream $OIS).readObject()
+      - pattern: new ObjectInputStream($STREAM).readObject()
+      # XMLDecoder
+      - pattern: (XMLDecoder $DEC).readObject()
+      - pattern: new XMLDecoder($STREAM).readObject()
+      # SnakeYAML
+      - pattern: (Yaml $YAML).load($DATA)
+      - pattern: new Yaml().load($DATA)
+      # XStream
+      - pattern: (XStream $XS).fromXML($DATA)
+      - pattern: new XStream().fromXML($DATA)
+
+  # ---------------------------------------------------------------------------
+  # Ruby: User input to Marshal/YAML
+  # ---------------------------------------------------------------------------
+  - id: ruby-deserialization-taint
+    mode: taint
+    paths:
+      exclude:
+        - "**/node_modules/**"
+        - "**/vendor/**"
+        - "**/dist/**"
+        - "**/build/**"
+        - "**/*.min.js"
+        - "**/*.min.mjs"
+        - "**/*.bundle.js"
+        - "**/*.chunk.js"
+        - "**/*.chunk.mjs"
+        - "**/*-init.mjs"
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [vuln]
+      confidence: HIGH
+      likelihood: HIGH
+      impact: HIGH
+      cwe: "CWE-502: Deserialization of Untrusted Data"
+      references:
+        - https://ruby-doc.org/core/Marshal.html
+    message: >-
+      User-controlled input is deserialized using Marshal or YAML.load.
+      This can lead to remote code execution. Use JSON or YAML.safe_load.
+    languages: [ruby]
+    severity: ERROR
+    pattern-sources:
+      - pattern: params[...]
+      - pattern: params.fetch(...)
+      - pattern: request.body.read
+      - pattern: request.raw_post
+    pattern-sinks:
+      - pattern: Marshal.load($DATA)
+      - pattern: Marshal.restore($DATA)
+      - pattern: YAML.load($DATA)
+      - pattern: Psych.load($DATA)
+    pattern-sanitizers:
+      - pattern: YAML.safe_load($DATA)
+      - pattern: JSON.parse($DATA)
+
+  # ---------------------------------------------------------------------------
+  # PHP: User input to unserialize
+  # ---------------------------------------------------------------------------
+  - id: php-deserialization-taint
+    mode: taint
+    paths:
+      exclude:
+        - "**/node_modules/**"
+        - "**/vendor/**"
+        - "**/dist/**"
+        - "**/build/**"
+        - "**/*.min.js"
+        - "**/*.min.mjs"
+        - "**/*.bundle.js"
+        - "**/*.chunk.js"
+        - "**/*.chunk.mjs"
+        - "**/*-init.mjs"
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [vuln]
+      confidence: HIGH
+      likelihood: HIGH
+      impact: HIGH
+      cwe: "CWE-502: Deserialization of Untrusted Data"
+      references:
+        - https://owasp.org/www-community/vulnerabilities/PHP_Object_Injection
+    message: >-
+      User-controlled input is passed to unserialize(). This can lead to
+      PHP Object Injection and remote code execution. Use json_decode() instead.
+    languages: [php]
+    severity: ERROR
+    pattern-sources:
+      - pattern: $_GET[...]
+      - pattern: $_POST[...]
+      - pattern: $_REQUEST[...]
+      - pattern: $_COOKIE[...]
+      - pattern: file_get_contents("php://input")
+      - pattern: $request->input(...)
+    pattern-sinks:
+      - pattern: unserialize($DATA)
+      - pattern: unserialize($DATA, [...])
+    pattern-sanitizers:
+      - pattern: json_decode($DATA)
+      - pattern: unserialize($DATA, ['allowed_classes' => false])
+
+  # ---------------------------------------------------------------------------
+  # Node.js: User input to node-serialize
+  # ---------------------------------------------------------------------------
+  - id: nodejs-deserialization-taint
+    mode: taint
+    paths:
+      exclude:
+        - "**/node_modules/**"
+        - "**/vendor/**"
+        - "**/dist/**"
+        - "**/build/**"
+        - "**/*.min.js"
+        - "**/*.min.mjs"
+        - "**/*.bundle.js"
+        - "**/*.chunk.js"
+        - "**/*.chunk.mjs"
+        - "**/*-init.mjs"
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [vuln]
+      confidence: HIGH
+      likelihood: HIGH
+      impact: HIGH
+      cwe: "CWE-502: Deserialization of Untrusted Data"
+      references:
+        - https://opsecx.com/index.php/2017/02/08/exploiting-node-js-deserialization-bug-for-remote-code-execution/
+    message: >-
+      User-controlled input is passed to node-serialize unserialize().
+      This library has known RCE vulnerabilities. Use JSON.parse() instead.
+    languages: [javascript, typescript]
+    severity: ERROR
+    pattern-sources:
+      - pattern: req.body
+      - pattern: req.body.$PROP
+      - pattern: req.query.$PROP
+      - pattern: req.params.$PROP
+    pattern-sinks:
+      - pattern: serialize.unserialize($DATA)
+      - pattern: require('node-serialize').unserialize($DATA)
+
+  # ===========================================================================
+  # AUDIT MODE RULES - Medium Confidence (dangerous function usage)
+  # ===========================================================================
+  # These flag potentially dangerous deserializers that should be reviewed.
+  # Lower confidence because they might be used with trusted data.
+  # ===========================================================================
+
+  # ---------------------------------------------------------------------------
+  # Python: Dangerous deserializers (audit)
+  # ---------------------------------------------------------------------------
+  - id: python-dangerous-deserializer-audit
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [audit]
+      confidence: MEDIUM
+      cwe: "CWE-502: Deserialization of Untrusted Data"
+    message: >-
+      Usage of potentially dangerous deserializer detected. If the input
+      can be influenced by users, this could lead to RCE. Review data sources.
+    languages: [python]
+    severity: WARNING
+    pattern-either:
+      # pickle variants
+      - pattern: pickle.loads(...)
+      - pattern: pickle.load(...)
+      - pattern: cPickle.loads(...)
+      - pattern: dill.loads(...)
+      - pattern: cloudpickle.loads(...)
+      # PyYAML unsafe variants
+      - pattern: yaml.load(..., Loader=yaml.Loader)
+      - pattern: yaml.load(..., Loader=yaml.UnsafeLoader)
+      - pattern: yaml.load(..., Loader=yaml.CLoader)
+      - pattern: yaml.unsafe_load(...)
+      - pattern: yaml.full_load(...)
+
+  # ---------------------------------------------------------------------------
+  # Java: SnakeYAML without SafeConstructor (audit)
+  # ---------------------------------------------------------------------------
+  - id: java-snakeyaml-unsafe-audit
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [audit]
+      confidence: MEDIUM
+      cwe: "CWE-502: Deserialization of Untrusted Data"
+      cve: CVE-2022-1471
+      references:
+        - https://nvd.nist.gov/vuln/detail/CVE-2022-1471
+    message: >-
+      SnakeYAML usage without SafeConstructor detected. This can lead to RCE
+      via YAML deserialization. Use: new Yaml(new SafeConstructor())
+    languages: [java]
+    severity: WARNING
+    patterns:
+      - pattern: new Yaml().load(...)
+      - pattern-not-inside: new Yaml(new SafeConstructor())
+
+  # ---------------------------------------------------------------------------
+  # .NET: BinaryFormatter (audit) - always dangerous
+  # ---------------------------------------------------------------------------
+  - id: dotnet-binaryformatter-audit
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [audit]
+      confidence: HIGH
+      cwe: "CWE-502: Deserialization of Untrusted Data"
+      references:
+        - https://docs.microsoft.com/en-us/dotnet/standard/serialization/binaryformatter-security-guide
+    message: >-
+      BinaryFormatter is inherently insecure and can lead to RCE.
+      Microsoft recommends not using BinaryFormatter at all.
+    languages: [csharp]
+    severity: ERROR
+    pattern-either:
+      - pattern: new BinaryFormatter().Deserialize(...)
+      - pattern: (BinaryFormatter $BF).Deserialize(...)
+      - pattern: BinaryFormatter $BF = ...;
+
+  # ---------------------------------------------------------------------------
+  # .NET: Newtonsoft TypeNameHandling (audit)
+  # ---------------------------------------------------------------------------
+  - id: dotnet-json-typenamehandling-audit
+    metadata:
+      author: threat-hunting
+      category: security
+      subcategory: [audit]
+      confidence: HIGH
+      cwe: "CWE-502: Deserialization of Untrusted Data"
+      references:
+        - https://www.blackhat.com/docs/us-17/thursday/us-17-Munoz-Friday-The-13th-JSON-Attacks-wp.pdf
+    message: >-
+      Newtonsoft.Json with TypeNameHandling can lead to RCE when deserializing
+      untrusted input. Use TypeNameHandling.None or a SerializationBinder.
+    languages: [csharp]
+    severity: ERROR
+    pattern-either:
+      - pattern: |
+          new JsonSerializerSettings { TypeNameHandling = TypeNameHandling.All }
+      - pattern: |
+          new JsonSerializerSettings { TypeNameHandling = TypeNameHandling.Auto }
+      - pattern: |
+          new JsonSerializerSettings { TypeNameHandling = TypeNameHandling.Objects }
+      - pattern: |
+          new JsonSerializerSettings { TypeNameHandling = TypeNameHandling.Arrays }

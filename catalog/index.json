@@ -1,0 +1,203 @@
+{
+  "tracked_orgs": [
+    {
+      "name": "Dynatrace",
+      "platform": "hackerone",
+      "program_url": "",
+      "added_date": "2025-12-20",
+      "last_scan": null,
+      "scan_count": 0,
+      "status": "archived",
+      "archived_date": "2025-12-23"
+    },
+    {
+      "name": "luno",
+      "platform": "other",
+      "program_url": "",
+      "added_date": "2025-12-20",
+      "last_scan": null,
+      "scan_count": 0,
+      "status": "archived",
+      "archived_date": "2025-12-23"
+    },
+    {
+      "name": "tronprotocol",
+      "platform": "hackerone",
+      "program_url": "",
+      "added_date": "2025-12-20",
+      "last_scan": null,
+      "scan_count": 0,
+      "status": "archived",
+      "archived_date": "2025-12-23"
+    },
+    {
+      "name": "wise",
+      "platform": "bugcrowd",
+      "program_url": "",
+      "added_date": "2025-12-20",
+      "last_scan": "2025-12-20-1437",
+      "scan_count": 2,
+      "status": "archived",
+      "archived_date": "2025-12-23"
+    },
+    {
+      "name": "mattermost-mbb-public",
+      "platform": "hackerone",
+      "program_url": "",
+      "added_date": "2025-12-21",
+      "last_scan": null,
+      "scan_count": 0,
+      "status": "archived",
+      "archived_date": "2025-12-23"
+    },
+    {
+      "name": "blockopensource",
+      "platform": "bugcrowd",
+      "program_url": "",
+      "added_date": "2025-12-21",
+      "last_scan": "2025-12-21-1336",
+      "scan_count": 1,
+      "status": "archived",
+      "archived_date": "2025-12-23"
+    },
+    {
+      "name": "hemi",
+      "platform": "bugcrowd",
+      "program_url": "",
+      "added_date": "2025-12-21",
+      "last_scan": "2025-12-21-1915",
+      "scan_count": 3,
+      "status": "archived",
+      "archived_date": "2025-12-23"
+    },
+    {
+      "name": "smartchain-mbb-og",
+      "platform": "bugcrowd",
+      "program_url": "",
+      "added_date": "2025-12-21",
+      "last_scan": "2025-12-21-1915",
+      "scan_count": 3,
+      "status": "archived",
+      "archived_date": "2025-12-23"
+    },
+    {
+      "name": "electroneum",
+      "platform": "bugcrowd",
+      "program_url": "",
+      "added_date": "2025-12-21",
+      "last_scan": "2025-12-21-1915",
+      "scan_count": 1,
+      "status": "archived",
+      "archived_date": "2025-12-23"
+    },
+    {
+      "name": "justeattakeaway",
+      "platform": "bugcrowd",
+      "program_url": "",
+      "added_date": "2025-12-21",
+      "last_scan": "2025-12-21-1701",
+      "scan_count": 2,
+      "status": "archived",
+      "archived_date": "2025-12-23"
+    },
+    {
+      "name": "dynatrace",
+      "platform": "hackerone",
+      "program_url": "",
+      "added_date": "2025-12-22",
+      "last_scan": "2025-12-22-1607",
+      "scan_count": 1,
+      "status": "archived",
+      "archived_date": "2025-12-22"
+    },
+    {
+      "name": "weblate",
+      "platform": "hackerone",
+      "program_url": "",
+      "added_date": "2025-12-22",
+      "last_scan": "2025-12-22-1148",
+      "scan_count": 1,
+      "status": "archived",
+      "archived_date": "2025-12-22"
+    },
+    {
+      "name": "cosmos",
+      "platform": "hackerone",
+      "program_url": "",
+      "added_date": "2025-12-22",
+      "last_scan": "2025-12-22-1148",
+      "scan_count": 1,
+      "status": "archived",
+      "archived_date": "2025-12-22"
+    },
+    {
+      "name": "owncloud",
+      "platform": "hackerone",
+      "program_url": "",
+      "added_date": "2025-12-22",
+      "last_scan": "2025-12-22-1149",
+      "scan_count": 1,
+      "status": "archived",
+      "archived_date": "2025-12-23"
+    },
+    {
+      "name": "phpbb",
+      "platform": "hackerone",
+      "program_url": "",
+      "added_date": "2025-12-22",
+      "last_scan": "2025-12-22-1400",
+      "scan_count": 1,
+      "status": "archived",
+      "archived_date": "2025-12-22"
+    },
+    {
+      "name": "test-org-12345",
+      "platform": "other",
+      "program_url": "",
+      "added_date": "2025-12-22",
+      "last_scan": null,
+      "scan_count": 0,
+      "status": "active"
+    },
+    {
+      "name": "nextcloud",
+      "platform": "hackerone",
+      "program_url": "",
+      "added_date": "2025-12-23",
+      "last_scan": "2025-12-23-2125",
+      "scan_count": 2,
+      "status": "archived",
+      "archived_date": "2025-12-24"
+    },
+    {
+      "name": "hyperledger",
+      "platform": "hackerone",
+      "program_url": "",
+      "added_date": "2025-12-23",
+      "last_scan": "2025-12-23-1337",
+      "scan_count": 1,
+      "status": "archived",
+      "archived_date": "2025-12-23"
+    },
+    {
+      "name": "elastic",
+      "platform": "hackerone",
+      "program_url": "",
+      "added_date": "2025-12-23",
+      "last_scan": null,
+      "scan_count": 0,
+      "status": "archived",
+      "archived_date": "2025-12-23"
+    },
+    {
+      "name": "stripe",
+      "platform": "hackerone",
+      "program_url": "",
+      "added_date": "2025-12-24",
+      "last_scan": "2025-12-24-1427",
+      "scan_count": 1,
+      "status": "archived",
+      "archived_date": "2025-12-25"
+    }
+  ]
+}

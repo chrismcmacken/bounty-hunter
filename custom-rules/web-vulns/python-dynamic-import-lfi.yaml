@@ -1,0 +1,454 @@
+rules:
+  # Taint-based rule with propagators for intermediate variable cases
+  - id: python-dynamic-import-lfi
+    mode: taint
+    languages:
+      - python
+    message: |
+      User input flows to dynamic import function without proper validation.
+      This could allow Local File Inclusion (LFI) or arbitrary module loading.
+
+      Attackers can:
+      - Import arbitrary modules (os, subprocess) to access dangerous functions
+      - Trigger side effects in __init__.py of unexpected modules
+      - Cause denial of service by importing resource-intensive modules
+      - Potentially achieve code execution via crafted module files
+
+      Remediation: Use an explicit allowlist of permitted module names:
+      ```python
+      ALLOWED_PLUGINS = {'analytics', 'export', 'notifications'}
+
+      def load_plugin(name):
+          if name not in ALLOWED_PLUGINS:
+              raise ValueError(f"Unknown plugin: {name}")
+          return importlib.import_module(f'plugins.{name}')
+      ```
+    severity: ERROR
+    metadata:
+      cwe: "CWE-98"
+      owasp:
+        - "A03:2021-Injection"
+      category: security
+      technology:
+        - python
+        - flask
+        - django
+        - fastapi
+      confidence: HIGH
+      likelihood: MEDIUM
+      impact: HIGH
+      subcategory:
+        - vuln
+      references:
+        - https://cwe.mitre.org/data/definitions/98.html
+        - https://docs.python.org/3/library/importlib.html#importlib.import_module
+        - https://book.hacktricks.xyz/generic-methodologies-and-resources/python/bypass-python-sandboxes
+    options:
+      symbolic_propagation: true
+
+    pattern-sources:
+      # Flask request.args
+      - pattern: request.args.get(...)
+      - pattern: request.args[...]
+      # Flask request.form
+      - pattern: request.form.get(...)
+      - pattern: request.form[...]
+      # Flask request.json
+      - pattern: request.json.get(...)
+      - pattern: request.json[...]
+      # Flask other
+      - pattern: request.data
+      - pattern: request.values.get(...)
+      - pattern: request.values[...]
+      - pattern: request.get_json(...)
+
+      # Django sources
+      - pattern: request.GET.get(...)
+      - pattern: request.GET[...]
+      - pattern: request.POST.get(...)
+      - pattern: request.POST[...]
+      - pattern: request.body
+      - pattern: request.data.get(...)
+      - pattern: request.data[...]
+
+    pattern-propagators:
+      # f-string propagation
+      - from: $X
+        to: $Y
+        pattern: $Y = f"...$X..."
+      # String concatenation
+      - from: $X
+        to: $Y
+        pattern: $Y = "..." + $X
+      - from: $X
+        to: $Y
+        pattern: $Y = $X + "..."
+      - from: $X
+        to: $Y
+        pattern: $Y = "..." + $X + "..."
+      # .format() propagation
+      - from: $X
+        to: $Y
+        pattern: $Y = "...".format($X)
+      - from: $X
+        to: $Y
+        pattern: $Y = "...".format(..., $X, ...)
+      # % formatting
+      - from: $X
+        to: $Y
+        pattern: $Y = "..." % $X
+
+    pattern-sinks:
+      # importlib.import_module
+      - pattern: importlib.import_module($MODULE)
+      - pattern: importlib.import_module($MODULE, ...)
+
+      # __import__ builtin
+      - pattern: __import__($MODULE)
+      - pattern: __import__($MODULE, ...)
+
+      # importlib.util functions
+      - pattern: importlib.util.find_spec($MODULE)
+      - pattern: importlib.util.find_spec($MODULE, ...)
+
+    pattern-sanitizers:
+      - patterns:
+          - pattern-inside: |
+              if $NAME in $ALLOWED:
+                  ...
+          - focus-metavariable: $NAME
+      - patterns:
+          - pattern-inside: |
+              if $NAME not in $ALLOWED:
+                  raise ...
+              ...
+          - focus-metavariable: $NAME
+      - pattern: $REGISTRY.get($NAME)
+
+  # Pattern-based: catches f-string inline patterns with request sources
+  - id: python-dynamic-import-lfi-fstring
+    languages:
+      - python
+    message: |
+      User input in f-string passed to dynamic import function.
+      This could allow Local File Inclusion (LFI) or arbitrary module loading.
+
+      Remediation: Use an explicit allowlist of permitted module names.
+    severity: ERROR
+    metadata:
+      cwe: "CWE-98"
+      owasp:
+        - "A03:2021-Injection"
+      category: security
+      technology:
+        - python
+        - flask
+        - django
+      confidence: HIGH
+      likelihood: MEDIUM
+      impact: HIGH
+      subcategory:
+        - vuln
+      references:
+        - https://cwe.mitre.org/data/definitions/98.html
+    patterns:
+      - pattern-either:
+          # Flask - f-string with request.args
+          - pattern: |
+              $VAR = request.args.get(...)
+              ...
+              importlib.import_module(f"...$VAR...")
+          - pattern: |
+              $VAR = request.args.get(...)
+              ...
+              importlib.import_module(f'...$VAR...')
+          - pattern: |
+              $VAR = request.args[...]
+              ...
+              importlib.import_module(f"...$VAR...")
+          - pattern: |
+              $VAR = request.form.get(...)
+              ...
+              importlib.import_module(f"...$VAR...")
+          - pattern: |
+              $VAR = request.form[...]
+              ...
+              importlib.import_module(f"...$VAR...")
+          - pattern: |
+              $VAR = request.json.get(...)
+              ...
+              importlib.import_module(f"...$VAR...")
+          - pattern: |
+              $VAR = request.json[...]
+              ...
+              importlib.import_module(f"...$VAR...")
+          # Django
+          - pattern: |
+              $VAR = request.GET.get(...)
+              ...
+              importlib.import_module(f"...$VAR...")
+          - pattern: |
+              $VAR = request.POST.get(...)
+              ...
+              importlib.import_module(f"...$VAR...")
+          - pattern: |
+              $VAR = request.GET[...]
+              ...
+              importlib.import_module(f"...$VAR...")
+          - pattern: |
+              $VAR = request.POST[...]
+              ...
+              importlib.import_module(f"...$VAR...")
+          # __import__ with f-string
+          - pattern: |
+              $VAR = request.json.get(...)
+              ...
+              __import__($VAR)
+          - pattern: |
+              $VAR = request.args.get(...)
+              ...
+              __import__($VAR)
+          - pattern: |
+              $VAR = request.form.get(...)
+              ...
+              __import__($VAR)
+          # % formatting
+          - pattern: |
+              $VAR = request.args.get(...)
+              ...
+              importlib.import_module("..." % $VAR)
+          - pattern: |
+              $VAR = request.form.get(...)
+              ...
+              importlib.import_module("..." % $VAR)
+          # importlib.util.find_spec
+          - pattern: |
+              $VAR = request.args.get(...)
+              ...
+              importlib.util.find_spec($VAR)
+          - pattern: |
+              $VAR = request.form.get(...)
+              ...
+              importlib.util.find_spec($VAR)
+      - pattern-not-inside: |
+          if $X in $ALLOWED:
+              ...
+      - pattern-not-inside: |
+          if $X not in $ALLOWED:
+              raise ...
+          ...
+
+  # Pattern-based: string concatenation with request sources
+  - id: python-dynamic-import-lfi-concat
+    languages:
+      - python
+    message: |
+      User input in string concatenation passed to dynamic import function.
+      This could allow Local File Inclusion (LFI) or arbitrary module loading.
+
+      Remediation: Use an explicit allowlist of permitted module names.
+    severity: ERROR
+    metadata:
+      cwe: "CWE-98"
+      owasp:
+        - "A03:2021-Injection"
+      category: security
+      technology:
+        - python
+        - flask
+        - django
+      confidence: HIGH
+      likelihood: MEDIUM
+      impact: HIGH
+      subcategory:
+        - vuln
+      references:
+        - https://cwe.mitre.org/data/definitions/98.html
+    patterns:
+      - pattern-either:
+          # Flask - string concat
+          - pattern: |
+              $VAR = request.args.get(...)
+              ...
+              importlib.import_module("..." + $VAR)
+          - pattern: |
+              $VAR = request.args.get(...)
+              ...
+              importlib.import_module("..." + $VAR + "...")
+          - pattern: |
+              $VAR = request.args[...]
+              ...
+              importlib.import_module("..." + $VAR)
+          - pattern: |
+              $VAR = request.form.get(...)
+              ...
+              importlib.import_module("..." + $VAR)
+          - pattern: |
+              $VAR = request.form[...]
+              ...
+              importlib.import_module("..." + $VAR)
+          # .format()
+          - pattern: |
+              $VAR = request.args.get(...)
+              ...
+              importlib.import_module("...".format($VAR))
+          - pattern: |
+              $VAR = request.form.get(...)
+              ...
+              importlib.import_module("...".format($VAR))
+          # Django
+          - pattern: |
+              $VAR = request.GET.get(...)
+              ...
+              importlib.import_module("..." + $VAR)
+          - pattern: |
+              $VAR = request.POST.get(...)
+              ...
+              importlib.import_module("..." + $VAR)
+      - pattern-not-inside: |
+          if $X in $ALLOWED:
+              ...
+
+  # Flask route parameter to import (common pattern in plugin systems)
+  - id: python-dynamic-import-lfi-route-param
+    languages:
+      - python
+    message: |
+      Flask route parameter flows directly to dynamic import without validation.
+      This could allow Local File Inclusion (LFI) or arbitrary module loading.
+
+      Remediation: Use an explicit allowlist of permitted module names.
+    severity: ERROR
+    metadata:
+      cwe: "CWE-98"
+      owasp:
+        - "A03:2021-Injection"
+      category: security
+      technology:
+        - python
+        - flask
+      confidence: HIGH
+      likelihood: MEDIUM
+      impact: HIGH
+      subcategory:
+        - vuln
+      references:
+        - https://cwe.mitre.org/data/definitions/98.html
+    patterns:
+      - pattern-either:
+          # f-string variants (double and single quotes)
+          - pattern: |
+              @$APP.route($ROUTE)
+              def $FUNC(..., $PARAM, ...):
+                  ...
+                  importlib.import_module(f"...$PARAM...")
+                  ...
+          - pattern: |
+              @$APP.route($ROUTE)
+              def $FUNC(..., $PARAM, ...):
+                  ...
+                  importlib.import_module(f'...$PARAM...')
+                  ...
+          # String concatenation
+          - pattern: |
+              @$APP.route($ROUTE)
+              def $FUNC(..., $PARAM, ...):
+                  ...
+                  importlib.import_module("..." + $PARAM)
+                  ...
+          - pattern: |
+              @$APP.route($ROUTE)
+              def $FUNC(..., $PARAM, ...):
+                  ...
+                  importlib.import_module('...' + $PARAM)
+                  ...
+          # __import__
+          - pattern: |
+              @$APP.route($ROUTE)
+              def $FUNC(..., $PARAM, ...):
+                  ...
+                  __import__($PARAM)
+                  ...
+          # Via intermediate variable
+          - pattern: |
+              @$APP.route($ROUTE)
+              def $FUNC(..., $PARAM, ...):
+                  ...
+                  $X = f"...$PARAM..."
+                  ...
+                  importlib.import_module($X)
+                  ...
+          - pattern: |
+              @$APP.route($ROUTE)
+              def $FUNC(..., $PARAM, ...):
+                  ...
+                  $X = f'...$PARAM...'
+                  ...
+                  importlib.import_module($X)
+                  ...
+      - pattern-not-inside: |
+          if $X in $ALLOWED:
+              ...
+      - pattern-not-inside: |
+          if $X not in $ALLOWED:
+              raise ...
+          ...
+
+  # exec/eval with user input
+  - id: python-dynamic-import-lfi-exec
+    mode: taint
+    languages:
+      - python
+    message: |
+      User input flows to exec() or eval() allowing arbitrary code execution.
+      This can be used to import arbitrary modules and execute malicious code.
+
+      Remediation: Never use exec() or eval() with user input.
+      Use explicit allowlists and safe alternatives instead.
+    severity: ERROR
+    metadata:
+      cwe: "CWE-98"
+      cwe-secondary: "CWE-94"
+      owasp:
+        - "A03:2021-Injection"
+      category: security
+      technology:
+        - python
+      confidence: HIGH
+      likelihood: HIGH
+      impact: HIGH
+      subcategory:
+        - vuln
+      references:
+        - https://cwe.mitre.org/data/definitions/98.html
+        - https://cwe.mitre.org/data/definitions/94.html
+
+    pattern-sources:
+      - pattern: request.args.get(...)
+      - pattern: request.args[...]
+      - pattern: request.form.get(...)
+      - pattern: request.form[...]
+      - pattern: request.json.get(...)
+      - pattern: request.json[...]
+      - pattern: request.data
+      - pattern: request.values.get(...)
+      - pattern: request.values[...]
+      - pattern: request.GET.get(...)
+      - pattern: request.GET[...]
+      - pattern: request.POST.get(...)
+      - pattern: request.POST[...]
+      - pattern: request.body
+
+    pattern-sinks:
+      - pattern: exec($CODE)
+      - pattern: exec($CODE, ...)
+      - pattern: eval($CODE)
+      - pattern: eval($CODE, ...)
+      - pattern: compile($CODE, ...)
+
+    pattern-sanitizers:
+      - patterns:
+          - pattern-inside: |
+              if $NAME in $ALLOWED:
+                  ...
+          - focus-metavariable: $NAME
