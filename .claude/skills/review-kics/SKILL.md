@@ -85,18 +85,25 @@ Then extract resource identifiers:
 
 ## Workflow
 
-### Step 1: Extract Findings and Resources
+### Step 1: Extract Findings and Verify Counts
 
 ```bash
-# Get summary of all findings
+# Step 1a: Get counts to verify total findings
+./scripts/extract-kics-findings.sh <org-name> count
+
+# Step 1b: Get summary of all findings
 ./scripts/extract-kics-findings.sh <org-name>
 
 # Or from catalog scans
 ./scripts/extract-kics-findings.sh <org-name> --catalog
 
-# Extract resource identifiers for verification
+# Step 1c: Extract resource identifiers for verification
 ./scripts/extract-kics-findings.sh <org-name> resources
 ```
+
+**CRITICAL COUNT VERIFICATION**: The summary output shows "Total: N findings" at the bottom. This MUST match the sum of all counts from step 1a (summing the 'total' column). If they don't match, the extraction may be truncating results - investigate before proceeding.
+
+**Note**: Findings are sorted by severity (HIGH first, then MEDIUM, then LOW). All HIGH severity findings appear at the top of the output for immediate attention.
 
 ### Step 2: Read IaC Files to Extract Resource Names
 

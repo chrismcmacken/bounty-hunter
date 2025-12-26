@@ -1,7 +1,7 @@
 {
-  "name": "freedomofpress",
-  "platform": "bugcrowd",
-  "github_org": "freedomofpress",
+  "name": "aikido",
+  "platform": "intigriti",
+  "github_org": "AikidoSec",
   "program_url": "",
   "scope": {
     "in_scope": [],

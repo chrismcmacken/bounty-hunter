@@ -20,6 +20,12 @@ set -euo pipefail
 # DuckDB read_json options for large files (100MB limit)
 DUCKDB_JSON_OPTS="maximum_object_size=104857600"
 
+# Run DuckDB with no row truncation
+# Usage: run_duckdb "SELECT ..."
+run_duckdb() {
+    duckdb -c ".maxrows -1" -c "$1" 2>/dev/null
+}
+
 # Catalog root directory
 CATALOG_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
@@ -252,7 +258,8 @@ has_nonempty_files() {
 # Args: query string
 # Uses PATTERN from extract_init
 duckdb_json() {
-    duckdb -c "$1" 2>/dev/null
+    # Set max_rows to -1 to show all rows (no truncation)
+    duckdb -c ".maxrows -1" -c "$1" 2>/dev/null
 }
 
 # Run DuckDB query and output as JSON

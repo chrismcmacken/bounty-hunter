@@ -216,7 +216,7 @@ COMMIT="SourceMetadata.Data.Git.commit"
 
 case "$FORMAT" in
     count)
-        duckdb -c "
+        run_duckdb "
             SELECT
                 regexp_extract(filename, '([^/]+)\\.json(\\.gz)?\$', 1) as repo,
                 count(*) as findings,
@@ -225,7 +225,7 @@ case "$FORMAT" in
             GROUP BY repo
             HAVING findings > 0
             ORDER BY verified DESC, findings DESC
-        " 2>/dev/null || echo "No findings found."
+        " || echo "No findings found."
 
         if [[ -z "$REPO" ]]; then
             totals=$(duckdb_scalar "
@@ -245,7 +245,7 @@ case "$FORMAT" in
         ;;
 
     summary)
-        duckdb -c "
+        run_duckdb "
             SELECT
                 regexp_extract(filename, '([^/]+)\\.json(\\.gz)?\$', 1) as repo,
                 CASE WHEN Verified THEN '[VERIFIED]' ELSE '[unverified]' END as status,
@@ -259,7 +259,7 @@ case "$FORMAT" in
                 repo,
                 DetectorName,
                 $FILE_PATH
-        " 2>/dev/null || echo "No findings found."
+        " || echo "No findings found."
 
         if [[ -z "$REPO" ]]; then
             totals=$(duckdb_scalar "
@@ -275,7 +275,7 @@ case "$FORMAT" in
         ;;
 
     verified)
-        result=$(duckdb -c "
+        result=$(run_duckdb "
             SELECT
                 regexp_extract(filename, '([^/]+)\\.json(\\.gz)?\$', 1) as repo,
                 DetectorName as detector,
@@ -285,7 +285,7 @@ case "$FORMAT" in
             FROM $READ_JSON
             WHERE Verified = true
             ORDER BY repo, DetectorName, $FILE_PATH
-        " 2>/dev/null)
+        ")
 
         if [[ -z "$result" || "$result" == *"0 rows"* ]]; then
             echo "No verified secrets found."
@@ -314,7 +314,7 @@ case "$FORMAT" in
     detectors)
         echo "Findings by detector type:"
         echo ""
-        duckdb -c "
+        run_duckdb "
             SELECT
                 DetectorName as detector,
                 count(*) as count,
@@ -322,7 +322,7 @@ case "$FORMAT" in
             FROM $READ_JSON
             GROUP BY DetectorName
             ORDER BY verified DESC, count DESC
-        " 2>/dev/null || echo "No findings found."
+        " || echo "No findings found."
         ;;
 
     *)

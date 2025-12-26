@@ -70,13 +70,19 @@ If you need functionality not provided by existing scripts, ask the user to upda
 
 ## Workflow
 
-### Step 1: Discover Artifacts
+### Step 1: Discover Artifacts and Verify Counts
 
-Run the extraction script to see what needs review:
+Run the extraction script with count format first:
 
 ```bash
+# Step 1a: Get counts to verify totals
+./scripts/extract-artifact-findings.sh <org-name> count
+
+# Step 1b: Get full summary
 ./scripts/extract-artifact-findings.sh <org-name>
 ```
+
+**CRITICAL COUNT VERIFICATION**: The summary output shows totals at the bottom. These MUST match the sums from step 1a. If they don't match, the extraction may be truncating results - investigate before proceeding.
 
 This categorizes artifacts by type:
 - **Archives** - Need extraction before scanning

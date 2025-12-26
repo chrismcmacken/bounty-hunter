@@ -35,10 +35,10 @@
       "platform": "bugcrowd",
       "program_url": "",
       "added_date": "2025-12-20",
-      "last_scan": "2025-12-20-1437",
-      "scan_count": 2,
+      "last_scan": "2025-12-26-0941",
+      "scan_count": 3,
       "status": "archived",
-      "archived_date": "2025-12-23"
+      "archived_date": "2025-12-26"
     },
     {
       "name": "mattermost-mbb-public",
@@ -224,17 +224,87 @@
       "platform": "hackerone",
       "program_url": "",
       "added_date": "2025-12-26",
-      "last_scan": null,
-      "scan_count": 0,
-      "status": "active"
+      "last_scan": "2025-12-26-0911",
+      "scan_count": 1,
+      "status": "archived",
+      "archived_date": "2025-12-26"
     },
     {
       "name": "freedomofpress",
       "platform": "bugcrowd",
       "program_url": "",
       "added_date": "2025-12-26",
-      "last_scan": null,
-      "scan_count": 0,
+      "last_scan": "2025-12-26-0911",
+      "scan_count": 1,
+      "status": "archived",
+      "archived_date": "2025-12-26"
+    },
+    {
+      "name": "chainlink",
+      "platform": "hackerone",
+      "program_url": "",
+      "added_date": "2025-12-26",
+      "last_scan": "2025-12-26-0950",
+      "scan_count": 1,
+      "status": "archived",
+      "archived_date": "2025-12-26"
+    },
+    {
+      "name": "opensea",
+      "platform": "bugcrowd",
+      "program_url": "",
+      "added_date": "2025-12-26",
+      "last_scan": "2025-12-26-1056",
+      "scan_count": 1,
+      "status": "archived",
+      "archived_date": "2025-12-26"
+    },
+    {
+      "name": "8x8-bounty",
+      "platform": "hackerone",
+      "program_url": "",
+      "added_date": "2025-12-26",
+      "last_scan": "2025-12-26-1056",
+      "scan_count": 1,
+      "status": "archived",
+      "archived_date": "2025-12-26"
+    },
+    {
+      "name": "enjin",
+      "platform": "hackerone",
+      "program_url": "",
+      "added_date": "2025-12-26",
+      "last_scan": "2025-12-26-1300",
+      "scan_count": 1,
+      "status": "archived",
+      "archived_date": "2025-12-26"
+    },
+    {
+      "name": "aikido",
+      "platform": "intigriti",
+      "program_url": "",
+      "added_date": "2025-12-26",
+      "last_scan": "2025-12-26-1301",
+      "scan_count": 1,
+      "status": "archived",
+      "archived_date": "2025-12-26"
+    },
+    {
+      "name": "kong",
+      "platform": "hackerone",
+      "program_url": "",
+      "added_date": "2025-12-26",
+      "last_scan": "2025-12-26-1309",
+      "scan_count": 1,
+      "status": "active"
+    },
+    {
+      "name": "liberapay",
+      "platform": "hackerone",
+      "program_url": "",
+      "added_date": "2025-12-26",
+      "last_scan": "2025-12-26-1309",
+      "scan_count": 1,
       "status": "active"
     }
   ]

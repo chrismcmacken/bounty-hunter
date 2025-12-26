@@ -1,7 +1,7 @@
 {
-  "name": "freedomofpress",
-  "platform": "bugcrowd",
-  "github_org": "freedomofpress",
+  "name": "enjin",
+  "platform": "hackerone",
+  "github_org": "enjin",
   "program_url": "",
   "scope": {
     "in_scope": [],

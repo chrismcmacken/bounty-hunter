@@ -49,7 +49,7 @@ fi
 
 case "$FORMAT" in
     count)
-        duckdb -c "
+        run_duckdb "
             SELECT
                 repo,
                 COALESCE(len(archives), 0) as archives,
@@ -59,7 +59,7 @@ case "$FORMAT" in
             FROM $BASE_QUERY
             WHERE len(archives) > 0 OR len(databases) > 0 OR len(sql_dumps) > 0 OR len(source_backups) > 0
             ORDER BY archives DESC, databases DESC, sql_dumps DESC
-        " 2>/dev/null || echo "No findings found."
+        " || echo "No findings found."
 
         if [[ -z "$REPO" ]]; then
             totals=$(duckdb_scalar "
@@ -80,7 +80,7 @@ case "$FORMAT" in
         ;;
 
     summary)
-        duckdb -c "
+        run_duckdb "
             SELECT
                 repo,
                 'ARCHIVE' as type,
@@ -124,7 +124,7 @@ case "$FORMAT" in
             WHERE len(source_backups) > 0
 
             ORDER BY repo, type, path
-        " 2>/dev/null || echo "No findings found."
+        " || echo "No findings found."
 
         if [[ -z "$REPO" ]]; then
             totals=$(duckdb_scalar "
@@ -149,7 +149,7 @@ case "$FORMAT" in
     archives)
         echo "Archives requiring extraction and scanning:"
         echo ""
-        duckdb -c "
+        run_duckdb "
             SELECT
                 repo,
                 unnest.path as path,
@@ -157,7 +157,7 @@ case "$FORMAT" in
             FROM $BASE_QUERY,
             UNNEST(archives)
             ORDER BY repo, unnest.path
-        " 2>/dev/null || echo "  (none)"
+        " || echo "  (none)"
 
         count=$(duckdb_scalar "
             SELECT COALESCE(SUM(len(archives)), 0)
@@ -173,7 +173,7 @@ case "$FORMAT" in
     sql)
         echo "SQL dumps for PII review:"
         echo ""
-        duckdb -c "
+        run_duckdb "
             SELECT
                 repo,
                 unnest.path as path,
@@ -181,7 +181,7 @@ case "$FORMAT" in
             FROM $BASE_QUERY,
             UNNEST(sql_dumps)
             ORDER BY unnest.has_data DESC, repo, unnest.path
-        " 2>/dev/null || echo "  (none)"
+        " || echo "  (none)"
 
         counts=$(duckdb_scalar "
             SELECT
@@ -200,14 +200,14 @@ case "$FORMAT" in
     sources)
         echo "Source code backups (may contain old vulnerabilities):"
         echo ""
-        duckdb -c "
+        run_duckdb "
             SELECT
                 repo,
                 unnest.path as path
             FROM $BASE_QUERY,
             UNNEST(source_backups)
             ORDER BY repo, unnest.path
-        " 2>/dev/null || echo "  (none)"
+        " || echo "  (none)"
 
         count=$(duckdb_scalar "
             SELECT COALESCE(SUM(len(source_backups)), 0)
@@ -221,14 +221,14 @@ case "$FORMAT" in
     databases)
         echo "Binary databases (manual inspection needed):"
         echo ""
-        duckdb -c "
+        run_duckdb "
             SELECT
                 repo,
                 unnest.path as path
             FROM $BASE_QUERY,
             UNNEST(databases)
             ORDER BY repo, unnest.path
-        " 2>/dev/null || echo "  (none)"
+        " || echo "  (none)"
 
         count=$(duckdb_scalar "
             SELECT COALESCE(SUM(len(databases)), 0)

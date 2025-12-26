@@ -36,7 +36,7 @@ READ_JSON="$(read_json_opts)"
 
 case "$FORMAT" in
     count)
-        duckdb -c "
+        run_duckdb "
             SELECT
                 regexp_extract(filename, '([^/]+)\\.json(\\.gz)?\$', 1) as repo,
                 COALESCE(total_counter, 0) as total,
@@ -46,7 +46,7 @@ case "$FORMAT" in
             FROM $READ_JSON
             WHERE total_counter > 0
             ORDER BY high DESC, medium DESC, total DESC
-        " 2>/dev/null || echo "No findings found."
+        " || echo "No findings found."
 
         if [[ -z "$REPO" ]]; then
             totals=$(duckdb_scalar "
@@ -70,7 +70,7 @@ case "$FORMAT" in
         ;;
 
     summary)
-        duckdb -c "
+        run_duckdb "
             WITH query_data AS (
                 SELECT
                     regexp_extract(filename, '([^/]+)\\.json(\\.gz)?\$', 1) as repo,
@@ -90,16 +90,16 @@ case "$FORMAT" in
             FROM query_data,
             UNNEST(files)
             ORDER BY
-                repo,
                 CASE severity
                     WHEN 'HIGH' THEN 1
                     WHEN 'MEDIUM' THEN 2
                     WHEN 'LOW' THEN 3
                     ELSE 4
                 END,
+                repo,
                 query_name,
                 unnest.file_name
-        " 2>/dev/null || echo "No findings found."
+        " || echo "No findings found."
 
         if [[ -z "$REPO" ]]; then
             totals=$(duckdb_scalar "
@@ -125,7 +125,7 @@ case "$FORMAT" in
 
         # Storage resources (S3, GCS, Azure)
         echo "=== Storage Resources ==="
-        duckdb -c "
+        run_duckdb "
             WITH query_data AS (
                 SELECT
                     regexp_extract(filename, '([^/]+)\\.json(\\.gz)?\$', 1) as repo,
@@ -148,12 +148,12 @@ case "$FORMAT" in
                OR query_name ILIKE '%s3%'
                OR query_name ILIKE '%blob%'
             ORDER BY repo, unnest.file_name
-        " 2>/dev/null || echo "  (none)"
+        " || echo "  (none)"
         echo ""
 
         # Security groups / network
         echo "=== Network / Security Groups ==="
-        duckdb -c "
+        run_duckdb "
             WITH query_data AS (
                 SELECT
                     regexp_extract(filename, '([^/]+)\\.json(\\.gz)?\$', 1) as repo,
@@ -173,12 +173,12 @@ case "$FORMAT" in
                OR query_name ILIKE '%0.0.0.0%'
                OR query_name ILIKE '%firewall%'
             ORDER BY repo, unnest.file_name
-        " 2>/dev/null || echo "  (none)"
+        " || echo "  (none)"
         echo ""
 
         # IAM / RBAC
         echo "=== IAM / RBAC ==="
-        duckdb -c "
+        run_duckdb "
             WITH query_data AS (
                 SELECT
                     regexp_extract(filename, '([^/]+)\\.json(\\.gz)?\$', 1) as repo,
@@ -199,12 +199,12 @@ case "$FORMAT" in
                OR query_name ILIKE '%rbac%'
                OR query_name ILIKE '%privilege%'
             ORDER BY repo, unnest.file_name
-        " 2>/dev/null || echo "  (none)"
+        " || echo "  (none)"
         echo ""
 
         # Kubernetes
         echo "=== Kubernetes / Container ==="
-        duckdb -c "
+        run_duckdb "
             WITH query_data AS (
                 SELECT
                     regexp_extract(filename, '([^/]+)\\.json(\\.gz)?\$', 1) as repo,
@@ -224,7 +224,7 @@ case "$FORMAT" in
                OR platform ILIKE '%helm%'
                OR platform ILIKE '%docker%'
             ORDER BY repo, query_name
-        " 2>/dev/null || echo "  (none)"
+        " || echo "  (none)"
         ;;
 
     full)
@@ -265,7 +265,7 @@ case "$FORMAT" in
     queries)
         echo "Top queries by finding count:"
         echo ""
-        duckdb -c "
+        run_duckdb "
             WITH query_data AS (
                 SELECT
                     unnest.severity,
@@ -287,7 +287,7 @@ case "$FORMAT" in
                 CASE severity WHEN 'HIGH' THEN 1 WHEN 'MEDIUM' THEN 2 ELSE 3 END,
                 count DESC
             LIMIT 30
-        " 2>/dev/null || echo "No findings found."
+        " || echo "No findings found."
         ;;
 
     *)

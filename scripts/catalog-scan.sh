@@ -208,6 +208,12 @@ if [[ -z "$NO_CATALOG" ]]; then
         exit 1
     fi
 
+    # Restore status to active if org was archived (scanning implies active use)
+    if is_org_status_archived "$ORG"; then
+        echo "Note: Restoring '$ORG' from archived to active status"
+        set_org_status "$ORG" "active"
+    fi
+
     # Get github_org(s) from meta.json for display
     while IFS= read -r org; do
         [[ -n "$org" ]] && GITHUB_ORGS+=("$org")

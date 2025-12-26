@@ -1,7 +1,7 @@
 {
-  "name": "freedomofpress",
-  "platform": "bugcrowd",
-  "github_org": "freedomofpress",
+  "name": "8x8-bounty",
+  "platform": "hackerone",
+  "github_org": "jitsi",
   "program_url": "",
   "scope": {
     "in_scope": [],

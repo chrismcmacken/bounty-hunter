@@ -1,14 +1,13 @@
 {
-  "name": "chia-network",
+  "name": "liberapay",
   "platform": "hackerone",
-  "github_org": "Chia-Network",
+  "github_org": "liberapay",
   "program_url": "",
   "scope": {
     "in_scope": [],
     "out_of_scope": []
   },
   "added_date": "2025-12-26",
-  "status": "archived",
-  "notes": "",
-  "archived_date": "2025-12-26"
+  "status": "active",
+  "notes": ""
 }

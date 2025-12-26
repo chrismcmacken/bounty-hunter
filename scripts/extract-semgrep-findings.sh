@@ -36,7 +36,7 @@ READ_JSON="$(read_json_opts)"
 
 case "$FORMAT" in
     count)
-        duckdb -c "
+        run_duckdb "
             SELECT
                 regexp_extract(filename, '([^/]+)\\.json(\\.gz)?\$', 1) as repo,
                 count(*) as findings
@@ -45,7 +45,7 @@ case "$FORMAT" in
             GROUP BY repo
             HAVING findings > 0
             ORDER BY findings DESC
-        " 2>/dev/null || echo "No findings found."
+        " || echo "No findings found."
 
         if [[ -z "$REPO" ]]; then
             total=$(duckdb_scalar "
@@ -58,7 +58,7 @@ case "$FORMAT" in
         ;;
 
     summary)
-        duckdb -c "
+        run_duckdb "
             SELECT
                 regexp_extract(filename, '([^/]+)\\.json(\\.gz)?\$', 1) as repo,
                 unnest.extra.severity as severity,
@@ -68,14 +68,14 @@ case "$FORMAT" in
             FROM $READ_JSON,
             UNNEST(results)
             ORDER BY
-                repo,
                 CASE unnest.extra.severity
                     WHEN 'ERROR' THEN 1
                     WHEN 'WARNING' THEN 2
                     ELSE 3
                 END,
+                repo,
                 unnest.path, unnest.start.line
-        " 2>/dev/null || echo "No findings found."
+        " || echo "No findings found."
 
         if [[ -z "$REPO" ]]; then
             total=$(duckdb_scalar "
@@ -120,7 +120,7 @@ case "$FORMAT" in
     rules)
         echo "Top rules by finding count:"
         echo ""
-        duckdb -c "
+        run_duckdb "
             SELECT
                 unnest.check_id as rule,
                 unnest.extra.severity as severity,
@@ -130,7 +130,7 @@ case "$FORMAT" in
             GROUP BY unnest.check_id, unnest.extra.severity
             ORDER BY count DESC
             LIMIT 20
-        " 2>/dev/null || echo "No findings found."
+        " || echo "No findings found."
         ;;
 
     *)

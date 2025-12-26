@@ -1,7 +1,7 @@
 {
-  "name": "freedomofpress",
-  "platform": "bugcrowd",
-  "github_org": "freedomofpress",
+  "name": "chainlink",
+  "platform": "hackerone",
+  "github_org": "smartcontractkit",
   "program_url": "",
   "scope": {
     "in_scope": [],

@@ -83,18 +83,26 @@ This script:
 
 ## Workflow
 
-### Step 1: Run the Extraction Script
+### Step 1: Run the Extraction Script and Verify Counts
 
-**ALWAYS START HERE** - Run the extraction script (as described above):
+**ALWAYS START HERE** - Run the extraction script with count format first:
 
 ```bash
+# Step 1a: Get counts to verify total findings
+./scripts/extract-trufflehog-findings.sh <org-name> count
+
+# Step 1b: Then get the full summary
 ./scripts/extract-trufflehog-findings.sh <org-name>
 ```
+
+**CRITICAL COUNT VERIFICATION**: The summary output shows "Total: N findings (M verified)" at the bottom. The total MUST match the sum of all counts from step 1a. If they don't match, the extraction may be truncating results - investigate before proceeding.
 
 Review the script output to understand:
 - Total number of findings and verified secrets
 - Which repos have the most exposures
 - Types of secrets detected (AWS, GitHub, PrivateKey, etc.)
+
+**Note**: Findings are sorted by verification status (VERIFIED first). All verified secrets appear at the top of the output for immediate attention.
 
 **For verified secrets** (confirmed active - highest priority):
 ```bash
@@ -105,24 +113,29 @@ Review the script output to understand:
 
 #### Priority by Secret Type
 
+**NOTE**: These priorities assume PRODUCTION credentials. Downgrade by 1-2 levels for development/staging credentials (see "Development vs Production Credentials" below).
+
 1. **CRITICAL** - Rotate immediately:
-   - Cloud provider keys (AWS, GCP, Azure)
-   - Database credentials
-   - Private keys (SSH, TLS, signing)
-   - Payment system keys (Stripe, etc.)
+   - Cloud provider keys (AWS, GCP, Azure) - *in production*
+   - Database credentials - *in production*
+   - Private keys (SSH, TLS, signing) - *for production systems*
+   - Payment system keys (Stripe live keys, etc.)
 
 2. **HIGH** - Rotate soon:
-   - Auth tokens (JWT, OAuth)
-   - Service account credentials
+   - Auth tokens (JWT, OAuth) - *for production identity providers*
+   - Service account credentials - *with production access*
    - API keys for sensitive services
 
 3. **MEDIUM** - Investigate:
    - Third-party SaaS API keys
    - Webhook secrets
+   - **Development/staging credentials for critical services** (e.g., dev AWS keys)
 
 4. **LOW** - Verify context:
    - Free-tier service keys
    - Read-only tokens
+   - **Development-only credentials** (e.g., local dev tokens, sandbox APIs)
+   - Test keys (Stripe `sk_test_`, etc.)
 
 #### Filter Test/Demo Secrets
 
@@ -145,6 +158,43 @@ Content indicators:
 - Application source code
 - CI/CD configuration
 - Verified status = true
+
+#### Development vs Production Credentials
+
+**IMPORTANT**: Even verified secrets may be LOW priority if they are development credentials. A "verified" status only means the credential is valid/active - it does NOT indicate production access or criticality.
+
+**Development environment indicators (downgrade to MEDIUM/LOW):**
+
+Token naming patterns:
+- `dev`, `development`, `staging`, `sandbox`, `preview`
+- `nonprod`, `non-prod`, `non_prod`
+- `local`, `localhost`, `127.0.0.1`
+- Service-specific: `_dev_`, `-dev-`, `.dev.`
+
+Context clues in surrounding code:
+- Environment checks like `if ENV == 'development'`
+- Comments mentioning "dev", "test", "local"
+- Conditional loading based on environment variables
+- URLs pointing to dev/staging domains
+
+Service-specific dev patterns:
+- **Auth0/Okta**: Dev tenant tokens (look for tenant names containing `dev`, `test`, or non-production domains)
+- **Stripe**: `sk_test_`, `pk_test_` prefixes
+- **AWS**: Keys associated with dev accounts or sandbox IAM roles
+- **Firebase**: Projects with `-dev`, `-staging` suffixes
+- **Twilio**: Test credentials (specific test SIDs)
+
+**Why dev credentials are lower priority:**
+1. **Limited blast radius** - Dev environments typically contain synthetic/test data, not real user data
+2. **Intentionally permissive** - Dev credentials are often shared/less protected by design
+3. **Lower bounty value** - Most programs pay less (or nothing) for dev environment access
+4. **Already assumed compromised** - Security teams often assume dev credentials leak
+
+**When dev credentials ARE still reportable:**
+- Dev credential provides path to production (shared secrets, privilege escalation)
+- Dev environment contains copies of real production data
+- Program explicitly includes dev/staging in scope
+- Dev credential reveals production infrastructure details
 
 ### Step 3: Deep Analysis
 
