@@ -4,7 +4,7 @@
 #
 # Usage: ./scripts/copy-setup.sh <destination>
 #        ./scripts/copy-setup.sh ~/new-threat-hunting
-#        ./scripts/copy-setup.sh /path/to/dest --include-findings
+#        ./scripts/copy-setup.sh /path/to/dest --include-scans
 #        ./scripts/copy-setup.sh /path/to/dest --include-catalog-scans
 #
 # Copies:
@@ -23,7 +23,7 @@
 #
 # Does NOT copy by default:
 #   - repos/             Cloned repositories (large, can be re-cloned)
-#   - findings/          Scan results (can be regenerated)
+#   - scans/             Scan results (can be regenerated)
 #   - .git/              Git history
 #   - .tmp/              Temporary files
 #   - catalog/tracked/*/scans/  Historical scan data (use --include-catalog-scans)
@@ -48,7 +48,7 @@ Usage: $(basename "$0") <destination> [options]
 Copy threat hunting setup to a new directory.
 
 Options:
-    --include-findings       Also copy findings/ directory
+    --include-scans          Also copy scans/ directory
     --include-catalog-scans  Also copy historical scan data in catalog/tracked/*/scans/
     --include-repos          Also copy repos/ directory (warning: can be very large)
     --dry-run                Show what would be copied without copying
@@ -56,22 +56,22 @@ Options:
 
 Examples:
     $(basename "$0") ~/new-threat-hunting
-    $(basename "$0") /opt/hunting --include-findings
+    $(basename "$0") /opt/hunting --include-scans
     $(basename "$0") ~/backup --include-catalog-scans --dry-run
 EOF
 }
 
 # Parse arguments
 DEST=""
-INCLUDE_FINDINGS=false
+INCLUDE_SCANS=false
 INCLUDE_CATALOG_SCANS=false
 INCLUDE_REPOS=false
 DRY_RUN=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --include-findings)
-            INCLUDE_FINDINGS=true
+        --include-scans)
+            INCLUDE_SCANS=true
             shift
             ;;
         --include-catalog-scans)
@@ -233,14 +233,14 @@ echo ""
 echo -e "${BLUE}Data directories:${NC}"
 copy_catalog
 
-if [[ "$INCLUDE_FINDINGS" == "true" ]]; then
-    copy_item "findings" "scan results"
+if [[ "$INCLUDE_SCANS" == "true" ]]; then
+    copy_item "scans" "scan results"
 else
     if [[ "$DRY_RUN" == "true" ]]; then
-        echo -e "  ${YELLOW}Skip${NC} findings/ (use --include-findings to copy)"
+        echo -e "  ${YELLOW}Skip${NC} scans/ (use --include-scans to copy)"
     else
-        echo -e "  ${YELLOW}Skip${NC} findings/ (use --include-findings to copy)"
-        mkdir -p "$DEST/findings"
+        echo -e "  ${YELLOW}Skip${NC} scans/ (use --include-scans to copy)"
+        mkdir -p "$DEST/scans"
     fi
 fi
 

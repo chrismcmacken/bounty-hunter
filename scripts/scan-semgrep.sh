@@ -61,7 +61,7 @@ export QUIET_MODE
 
 # Default repos dir to org name if not specified
 REPOS_DIR="${REPOS_DIR:-$ORG}"
-OUTPUT_DIR="${OUTPUT_DIR:-findings/$ORG}"
+OUTPUT_DIR="${OUTPUT_DIR:-scans/$ORG}"
 
 if [[ ! -d "$REPOS_DIR" ]]; then
     echo "Error: Directory '$REPOS_DIR' not found."

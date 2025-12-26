@@ -7,8 +7,8 @@ set -euo pipefail
 # templates to test the specific endpoints where issues were found.
 #
 # Usage: ./scripts/generate-targeted-tests.sh <org> [options]
-# Input: findings/<org>/semgrep-results/*.json
-# Output: findings/<org>/custom-templates/*.yaml
+# Input: scans/<org>/semgrep-results/*.json
+# Output: scans/<org>/custom-templates/*.yaml
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -36,7 +36,7 @@ Vulnerability Types:
   redirect       Open Redirect
 
 Output:
-  findings/<org>/custom-templates/targeted-<hash>.yaml
+  scans/<org>/custom-templates/targeted-<hash>.yaml
 
 The script will:
 1. Parse semgrep findings for exploitable patterns
@@ -76,7 +76,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-OUTPUT_DIR="${OUTPUT_DIR:-$(pwd)/findings/$ORG/custom-templates}"
+OUTPUT_DIR="${OUTPUT_DIR:-$(pwd)/scans/$ORG/custom-templates}"
 MANIFEST_FILE="$OUTPUT_DIR/manifest.json"
 
 mkdir -p "$OUTPUT_DIR"

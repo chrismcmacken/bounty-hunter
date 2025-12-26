@@ -45,7 +45,7 @@ Individual scanners (called by catalog-scan.sh):
 ./scripts/scan-kics.sh <org-name>        # IaC misconfigurations (reconnaissance)
 ./scripts/scan-inventory.sh <org-name>   # Language stats (scc) + dependencies (syft)
 ```
-Results saved to `findings/<org>/` (semgrep-results, trufflehog-results, artifact-results, kics-results, inventory).
+Results saved to `scans/<org>/` (semgrep-results, trufflehog-results, artifact-results, kics-results, inventory).
 
 ### 3. Review All Findings (Recommended)
 ```bash
@@ -73,7 +73,7 @@ Use the `review-semgrep`, `review-trufflehog`, `review-artifacts`, and `review-k
 ```
 Inventory data is stored in:
 - `catalog/languages.json` - Global language stats for all orgs
-- `findings/<org>/inventory/<repo>-sbom.json` - Per-repo SBOM files
+- `scans/<org>/inventory/<repo>-sbom.json` - Per-repo SBOM files
 
 Use inventory to prioritize custom Semgrep rule development by language.
 See `docs/inventory-scanning.md` for detailed documentation.

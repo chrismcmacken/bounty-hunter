@@ -62,7 +62,7 @@ Usage: $script_name <org-name> [format] [repo-name]
        $script_name <org-name> --catalog [format] [scan-timestamp]
 
 Sources:
-  (default)           Read from findings/<org>/$RESULTS_TYPE/ (per-repo files)
+  (default)           Read from scans/<org>/$RESULTS_TYPE/ (per-repo files)
   --catalog           Read from catalog scans (merged gzipped files)
   --scan <timestamp>  Read specific catalog scan (e.g., 2025-12-24-1427)
 
@@ -75,7 +75,7 @@ EOF
     done
     echo ""
     echo "Examples:"
-    echo "  $script_name myorg                    # From findings/"
+    echo "  $script_name myorg                    # From scans/"
     echo "  $script_name myorg --catalog          # From latest catalog scan"
     echo "  $script_name myorg --scan 2025-12-24  # From specific scan"
 }
@@ -191,8 +191,8 @@ extract_init() {
         REPO=""
 
     else
-        # FINDINGS MODE: Read from findings/ directory (per-repo files)
-        RESULTS_DIR="findings/$ORG/$RESULTS_TYPE"
+        # SCANS MODE: Read from scans/ directory (per-repo files)
+        RESULTS_DIR="scans/$ORG/$RESULTS_TYPE"
 
         # Check results directory exists
         if [[ ! -d "$RESULTS_DIR" ]]; then

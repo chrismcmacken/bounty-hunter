@@ -41,7 +41,6 @@ Options:
     --skip-clone          Skip cloning (repos already exist)
     --skip-scan           Skip scanning (just track and clone)
     --include-archived    Include archived repos (secrets-only scanning)
-    --no-commit           Don't prompt for git commit at end
     -h, --help            Show this help message
 
 Scan options (passed to catalog-scan.sh):
@@ -124,7 +123,8 @@ if [[ "$MODE" == "archive" || "$MODE" == "unarchive" ]]; then
         fi
 
         REPOS_DIR="$(get_org_repos_dir "$ORG")"
-        SCANS_DIR="$(get_org_scans_dir "$ORG")"
+        SCANS_OUTPUT_DIR="$CATALOG_ROOT/scans/$ORG"
+        CATALOG_SCANS_DIR="$(get_org_scans_dir "$ORG")"
         FINDINGS_DIR="$CATALOG_ROOT/findings/$ORG"
 
         echo ""
@@ -134,27 +134,34 @@ if [[ "$MODE" == "archive" || "$MODE" == "unarchive" ]]; then
         echo ""
 
         # Show what will be deleted
+        echo "Data to delete:"
         if [[ -d "$REPOS_DIR" ]]; then
             repo_count=$(count_org_repos "$ORG")
             repo_size=$(get_repos_size "$ORG")
-            echo "Repository data to delete:"
-            echo "  Path:  $REPOS_DIR"
-            echo "  Size:  $repo_size"
-            echo "  Repos: $repo_count"
+            echo "  Repos: $REPOS_DIR ($repo_count repos, $repo_size)"
         else
-            echo "Repository data: (none - repos not cloned)"
+            repo_count=0
+            repo_size="0"
+            echo "  Repos: (none)"
+        fi
+        if [[ -d "$SCANS_OUTPUT_DIR" ]]; then
+            scans_count=$(find "$SCANS_OUTPUT_DIR" -type f 2>/dev/null | wc -l | xargs)
+            scans_size=$(du -sh "$SCANS_OUTPUT_DIR" 2>/dev/null | cut -f1)
+            echo "  Scans: $SCANS_OUTPUT_DIR ($scans_count files, $scans_size)"
+        else
+            scans_count=0
+            scans_size="0"
+            echo "  Scans: (none)"
         fi
         echo ""
 
         # Show what will be preserved
-        scan_count=$(count_org_scans "$ORG")
-        echo "Scan data preserved:"
-        echo "  Path:  $SCANS_DIR"
-        echo "  Scans: $scan_count"
+        catalog_scan_count=$(count_org_scans "$ORG")
+        echo "Data preserved:"
+        echo "  Catalog history: $CATALOG_SCANS_DIR ($catalog_scan_count scans)"
         if [[ -d "$FINDINGS_DIR" ]]; then
-            findings_count=$(find "$FINDINGS_DIR" -type f -name "*.json" 2>/dev/null | wc -l | xargs)
-            echo "  Path:  $FINDINGS_DIR"
-            echo "  Files: $findings_count"
+            findings_count=$(find "$FINDINGS_DIR" -type f 2>/dev/null | wc -l | xargs)
+            echo "  Findings:        $FINDINGS_DIR ($findings_count files)"
         fi
         echo ""
 
@@ -175,6 +182,13 @@ if [[ "$MODE" == "archive" || "$MODE" == "unarchive" ]]; then
             echo "done"
         fi
 
+        # Delete scans output directory
+        if [[ -d "$SCANS_OUTPUT_DIR" ]]; then
+            echo -n "Deleting $SCANS_OUTPUT_DIR... "
+            rm -rf "$SCANS_OUTPUT_DIR"
+            echo "done"
+        fi
+
         # Update status
         echo -n "Updating catalog... "
         set_org_status "$ORG" "archived"
@@ -186,10 +200,12 @@ if [[ "$MODE" == "archive" || "$MODE" == "unarchive" ]]; then
         echo "========================================"
         echo ""
         echo "Status: archived"
-        if [[ -n "${repo_count:-}" ]]; then
-            echo "Repos deleted: $repo_count (${repo_size} freed)"
-        fi
-        echo "Scan history: preserved ($scan_count scans)"
+        echo "Deleted:"
+        [[ "${repo_count:-0}" -gt 0 ]] && echo "  Repos: $repo_count ($repo_size)"
+        [[ "${scans_count:-0}" -gt 0 ]] && echo "  Scans: $scans_count files ($scans_size)"
+        echo "Preserved:"
+        echo "  Catalog history: $catalog_scan_count scans"
+        [[ -d "$FINDINGS_DIR" ]] && echo "  Findings: $findings_count files"
         echo ""
         echo "To unarchive and re-clone:"
         echo "  ./scripts/hunt.sh $ORG --unarchive"
@@ -272,8 +288,7 @@ PROGRAM_URL=""
 SKIP_CLONE=""
 SKIP_SCAN=""
 INCLUDE_ARCHIVED=""
-NO_COMMIT=""
-SCAN_OPTS=()
+SCAN_OPTS=("--no-commit")
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -309,11 +324,6 @@ while [[ $# -gt 0 ]]; do
             ;;
         --include-archived)
             INCLUDE_ARCHIVED="1"
-            shift
-            ;;
-        --no-commit)
-            NO_COMMIT="1"
-            SCAN_OPTS+=("--no-commit")
             shift
             ;;
         --semgrep|--secrets|--artifacts|--kics|--inventory)
@@ -463,7 +473,7 @@ echo "========================================"
 echo ""
 echo "Catalog:   catalog/tracked/$ORG/"
 echo "Repos:     repos/$ORG/"
-echo "Findings:  findings/$ORG/"
+echo "Scans:     scans/$ORG/"
 echo ""
 echo "Next steps:"
 echo "  Review:   /review-all $ORG"

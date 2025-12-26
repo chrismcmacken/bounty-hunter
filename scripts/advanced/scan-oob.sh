@@ -10,7 +10,7 @@ set -euo pipefail
 # - Blind XSS
 #
 # Usage: ./scripts/scan-oob.sh <org-name> [options]
-# Output: findings/<org>/dynamic-results/oob/
+# Output: scans/<org>/dynamic-results/oob/
 
 show_help() {
     cat << 'EOF'
@@ -42,8 +42,8 @@ Examples:
   ./scripts/scan-oob.sh acme-corp -s https://oob.example.com -d 600
 
 Output:
-  findings/<org>/dynamic-results/oob/payloads-<timestamp>.txt   - Payloads to inject
-  findings/<org>/dynamic-results/oob/interactions-<timestamp>.json - Captured callbacks
+  scans/<org>/dynamic-results/oob/payloads-<timestamp>.txt   - Payloads to inject
+  scans/<org>/dynamic-results/oob/interactions-<timestamp>.json - Captured callbacks
 
 Usage Flow:
   1. Run this script to start monitoring
@@ -84,7 +84,7 @@ if [[ -z "$INTERACTSH_SERVER" ]]; then
     exit 1
 fi
 
-RESULTS_DIR="$(pwd)/findings/$ORG/dynamic-results/oob"
+RESULTS_DIR="$(pwd)/scans/$ORG/dynamic-results/oob"
 mkdir -p "$RESULTS_DIR"
 
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)

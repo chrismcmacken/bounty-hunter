@@ -198,6 +198,44 @@
       "scan_count": 1,
       "status": "archived",
       "archived_date": "2025-12-25"
+    },
+    {
+      "name": "auth0-okta",
+      "platform": "bugcrowd",
+      "program_url": "",
+      "added_date": "2025-12-25",
+      "last_scan": "2025-12-25-1605",
+      "scan_count": 1,
+      "status": "archived",
+      "archived_date": "2025-12-26"
+    },
+    {
+      "name": "circle-bbp",
+      "platform": "hackerone",
+      "program_url": "",
+      "added_date": "2025-12-25",
+      "last_scan": "2025-12-25-1604",
+      "scan_count": 1,
+      "status": "archived",
+      "archived_date": "2025-12-26"
+    },
+    {
+      "name": "chia-network",
+      "platform": "hackerone",
+      "program_url": "",
+      "added_date": "2025-12-26",
+      "last_scan": null,
+      "scan_count": 0,
+      "status": "active"
+    },
+    {
+      "name": "freedomofpress",
+      "platform": "bugcrowd",
+      "program_url": "",
+      "added_date": "2025-12-26",
+      "last_scan": null,
+      "scan_count": 0,
+      "status": "active"
     }
   ]
 }

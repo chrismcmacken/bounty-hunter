@@ -57,7 +57,7 @@ Manual Target Setup:
   ./scripts/scan-dynamic.sh acme-corp --skip-recon
 
 Output:
-  findings/<org>/dynamic-results/
+  scans/<org>/dynamic-results/
     ├── recon/              # Subdomain and live host data
     ├── targets.txt         # Master target list
     └── nuclei/             # Vulnerability scan results
@@ -97,7 +97,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-RESULTS_DIR="$(pwd)/findings/$ORG/dynamic-results"
+RESULTS_DIR="$(pwd)/scans/$ORG/dynamic-results"
 TARGETS_FILE="$RESULTS_DIR/targets.txt"
 
 mkdir -p "$RESULTS_DIR"

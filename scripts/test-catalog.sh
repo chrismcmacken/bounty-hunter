@@ -133,8 +133,8 @@ test_phase_3_6() {
 
     # Test formats if we have data (use actual supported formats)
     local ORG
-    ORG=$(ls -1 findings 2>/dev/null | head -1 || echo "")
-    if [[ -n "$ORG" && -d "findings/$ORG/semgrep-results" ]]; then
+    ORG=$(ls -1 scans 2>/dev/null | head -1 || echo "")
+    if [[ -n "$ORG" && -d "scans/$ORG/semgrep-results" ]]; then
         for fmt in summary full count jsonl rules; do
             run_test "semgrep format: $fmt" \
                 "./scripts/extract-semgrep-findings.sh '$ORG' '$fmt' > /dev/null 2>&1 && echo PASS"

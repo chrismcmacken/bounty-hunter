@@ -56,7 +56,7 @@ fi
 ORG="$1"
 SCOPE_FILE="$2"
 
-TARGETS_FILE="findings/$ORG/dynamic-results/targets.txt"
+TARGETS_FILE="scans/$ORG/dynamic-results/targets.txt"
 
 if [[ ! -f "$TARGETS_FILE" ]]; then
     echo "Error: Targets file not found: $TARGETS_FILE"

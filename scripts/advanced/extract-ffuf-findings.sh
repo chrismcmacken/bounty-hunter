@@ -35,7 +35,7 @@ EOF
     exit 1
 fi
 
-RESULTS_DIR="findings/$ORG/dynamic-results/ffuf"
+RESULTS_DIR="scans/$ORG/dynamic-results/ffuf"
 
 if [ ! -d "$RESULTS_DIR" ]; then
     echo "Error: Results directory not found: $RESULTS_DIR"

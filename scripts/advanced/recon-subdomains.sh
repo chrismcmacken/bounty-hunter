@@ -9,7 +9,7 @@ set -euo pipefail
 # Usage: ./scripts/recon-subdomains.sh <org-name> <domain1> [domain2] ...
 # Example: ./scripts/recon-subdomains.sh acme-corp acme.com acme.io
 #
-# Output: findings/<org>/dynamic-results/recon/subdomains.txt
+# Output: scans/<org>/dynamic-results/recon/subdomains.txt
 
 if [[ $# -lt 2 ]]; then
     cat << 'EOF'
@@ -26,7 +26,7 @@ Examples:
   ./scripts/recon-subdomains.sh acme-corp acme.com acme.io api.acme.com
 
 Output:
-  findings/<org>/dynamic-results/recon/subdomains.txt
+  scans/<org>/dynamic-results/recon/subdomains.txt
 
 Tips:
   Configure API keys for better results:
@@ -39,7 +39,7 @@ ORG="$1"
 shift
 DOMAINS=("$@")
 
-RESULTS_DIR="$(pwd)/findings/$ORG/dynamic-results/recon"
+RESULTS_DIR="$(pwd)/scans/$ORG/dynamic-results/recon"
 mkdir -p "$RESULTS_DIR"
 
 if ! command -v subfinder &> /dev/null; then

@@ -48,7 +48,7 @@ done
 export QUIET_MODE
 
 REPOS_DIR="${REPOS_DIR:-$ORG}"
-OUTPUT_BASE="${OUTPUT_BASE:-findings/$ORG}"
+OUTPUT_BASE="${OUTPUT_BASE:-scans/$ORG}"
 
 # Handle both relative and absolute paths
 if [[ "$OUTPUT_BASE" = /* ]]; then

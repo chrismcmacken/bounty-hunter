@@ -18,11 +18,11 @@ SHOULD_BE_GZIPPED_PATTERNS=(
     "catalog/tracked/.*/scans/.*/trufflehog\\.json$"
     "catalog/tracked/.*/scans/.*/kics\\.json$"
     "catalog/tracked/.*/scans/.*/artifacts\\.json$"
-    "findings/.*/semgrep-results/.*\\.json$"
-    "findings/.*/trufflehog-results/.*\\.json$"
-    "findings/.*/kics-results/.*\\.json$"
-    "findings/.*/artifact-results/.*\\.json$"
-    "findings/.*/inventory/.*-sbom\\.json$"
+    "scans/.*/semgrep-results/.*\\.json$"
+    "scans/.*/trufflehog-results/.*\\.json$"
+    "scans/.*/kics-results/.*\\.json$"
+    "scans/.*/artifact-results/.*\\.json$"
+    "scans/.*/inventory/.*-sbom\\.json$"
 )
 
 # Colors
