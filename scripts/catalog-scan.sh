@@ -24,11 +24,11 @@ Run security scans for an organization's repositories.
 
 Modes:
     (default)       Catalog mode - org must be tracked, results stored in catalog
-    --no-catalog    One-off scan - no tracking required, results in findings/<org>/
+    --no-catalog    One-off scan - no tracking required, results in scans/<org>/
 
 Options:
     --repos-dir <path>   Directory containing repos (catalog: repos/<org>, standalone: ./<org>)
-    --output-dir <path>  Directory for results (default: findings/<org>)
+    --output-dir <path>  Directory for results (default: scans/<org>)
     --no-pull            Skip git pull on repositories (catalog mode only)
     --no-commit          Skip git commit prompt (catalog mode only)
     -q, --quiet          Quiet mode: show progress and final summary only
@@ -215,7 +215,7 @@ if [[ -z "$NO_CATALOG" ]]; then
 
     # Set default repos dir for catalog mode
     REPOS_DIR="${REPOS_DIR:-$CATALOG_ROOT/repos/$ORG}"
-    OUTPUT_DIR="${OUTPUT_DIR:-$CATALOG_ROOT/findings/$ORG}"
+    OUTPUT_DIR="${OUTPUT_DIR:-$CATALOG_ROOT/scans/$ORG}"
 
     if [[ ! -d "$REPOS_DIR" ]]; then
         echo "Error: Repos not found at $REPOS_DIR"
@@ -230,7 +230,7 @@ if [[ -z "$NO_CATALOG" ]]; then
 else
     # STANDALONE MODE: Simple defaults
     REPOS_DIR="${REPOS_DIR:-$ORG}"
-    OUTPUT_DIR="${OUTPUT_DIR:-findings/$ORG}"
+    OUTPUT_DIR="${OUTPUT_DIR:-scans/$ORG}"
 
     if [[ ! -d "$REPOS_DIR" ]]; then
         echo "Error: Repository directory '$REPOS_DIR' not found."
@@ -244,7 +244,7 @@ fi
 # =============================================================================
 
 # Create output directories
-mkdir -p "$OUTPUT_DIR/"{semgrep-results,trufflehog-results,artifact-results,kics-results,inventory,reports}
+mkdir -p "$OUTPUT_DIR/"{semgrep-results,trufflehog-results,artifact-results,kics-results,inventory}
 
 # Count repos
 REPO_COUNT=$(find "$REPOS_DIR" -maxdepth 1 -mindepth 1 -type d ! -name ".*" | wc -l | xargs)

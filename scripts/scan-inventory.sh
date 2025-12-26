@@ -7,7 +7,7 @@ set -euo pipefail
 #
 # Storage:
 #   - Languages: catalog/languages.json (global, all orgs in one file)
-#   - SBOMs: findings/<org>/inventory/<repo>-sbom.json (per-repo)
+#   - SBOMs: scans/<org>/inventory/<repo>-sbom.json (per-repo)
 #
 # Dependencies: scc, syft, jq
 
@@ -32,7 +32,7 @@ Arguments:
 
 Options:
   --repos-dir <path>    Directory containing repos (default: repos/<org>)
-  --output-dir <path>   Output directory for SBOMs (default: findings/<org>)
+  --output-dir <path>   Output directory for SBOMs (default: scans/<org>)
   --languages-only      Only run language analysis (scc)
   --sbom-only           Only run dependency analysis (syft)
   --no-languages        Skip language analysis
@@ -41,8 +41,8 @@ Options:
   -h, --help            Show this help message
 
 Output:
-  catalog/languages.json                    Global language stats (updated)
-  findings/<org>/inventory/<repo>-sbom.json Per-repo SBOM files
+  catalog/languages.json                  Global language stats (updated)
+  scans/<org>/inventory/<repo>-sbom.json  Per-repo SBOM files
 
 Examples:
   $SCRIPT_NAME hemi                         # Full inventory scan
@@ -146,7 +146,7 @@ fi
 
 # Set defaults
 REPOS_DIR="${REPOS_DIR:-$ROOT_DIR/repos/$ORG}"
-OUTPUT_DIR="${OUTPUT_DIR:-$ROOT_DIR/findings/$ORG}"
+OUTPUT_DIR="${OUTPUT_DIR:-$ROOT_DIR/scans/$ORG}"
 LANGUAGES_FILE="$ROOT_DIR/catalog/languages.json"
 INVENTORY_DIR="$OUTPUT_DIR/inventory"
 

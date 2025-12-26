@@ -9,8 +9,8 @@ set -euo pipefail
 # Usage: ./scripts/recon-httpx.sh <org-name>
 # Example: ./scripts/recon-httpx.sh acme-corp
 #
-# Input: findings/<org>/dynamic-results/recon/subdomains.txt
-# Output: findings/<org>/dynamic-results/recon/live-hosts.json
+# Input: scans/<org>/dynamic-results/recon/subdomains.txt
+# Output: scans/<org>/dynamic-results/recon/live-hosts.json
 
 if [[ $# -ne 1 ]]; then
     cat << 'EOF'
@@ -25,7 +25,7 @@ Prerequisites:
   Run recon-subdomains.sh first to generate subdomains.txt
 
 Output:
-  findings/<org>/dynamic-results/recon/live-hosts.json
+  scans/<org>/dynamic-results/recon/live-hosts.json
 
 The JSON output includes:
   - url: Full URL
@@ -39,7 +39,7 @@ EOF
 fi
 
 ORG="$1"
-RESULTS_DIR="$(pwd)/findings/$ORG/dynamic-results/recon"
+RESULTS_DIR="$(pwd)/scans/$ORG/dynamic-results/recon"
 SUBDOMAINS_FILE="$RESULTS_DIR/subdomains.txt"
 OUTPUT_FILE="$RESULTS_DIR/live-hosts.json"
 URLS_FILE="$RESULTS_DIR/live-urls.txt"

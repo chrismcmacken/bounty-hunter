@@ -24,8 +24,8 @@ fi
 
 ORG="$1"
 REPO="${2:-}"
-ARTIFACT_DIR="findings/$ORG/artifact-results"
-TRUFFLEHOG_DIR="findings/$ORG/trufflehog-results"
+ARTIFACT_DIR="scans/$ORG/artifact-results"
+TRUFFLEHOG_DIR="scans/$ORG/trufflehog-results"
 
 if [[ ! -d "$ARTIFACT_DIR" ]]; then
     echo "Error: No artifact results found. Run scan-artifacts.sh first."

@@ -7,8 +7,8 @@ set -euo pipefail
 # publicly accessible (not just misconfigured in code).
 #
 # Usage: ./scripts/verify-cloud-exposure.sh <org>
-# Input: findings/<org>/cloud-resources.json
-# Output: findings/<org>/exposed-resources.json
+# Input: scans/<org>/cloud-resources.json
+# Output: scans/<org>/exposed-resources.json
 
 show_help() {
     cat << 'EOF'
@@ -33,7 +33,7 @@ What it tests:
   - Ingress hosts: HTTP(S) reachability
 
 Output:
-  findings/<org>/exposed-resources.json
+  scans/<org>/exposed-resources.json
 
 Examples:
   ./scripts/verify-cloud-exposure.sh acme-corp
@@ -66,8 +66,8 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-INPUT_FILE="$(pwd)/findings/$ORG/cloud-resources.json"
-OUTPUT_FILE="$(pwd)/findings/$ORG/exposed-resources.json"
+INPUT_FILE="$(pwd)/scans/$ORG/cloud-resources.json"
+OUTPUT_FILE="$(pwd)/scans/$ORG/exposed-resources.json"
 
 if [[ ! -f "$INPUT_FILE" ]]; then
     echo "Error: Cloud resources file not found: $INPUT_FILE"

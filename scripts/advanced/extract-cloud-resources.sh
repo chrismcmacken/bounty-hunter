@@ -8,7 +8,7 @@ set -euo pipefail
 # that can be tested for public exposure.
 #
 # Usage: ./scripts/extract-cloud-resources.sh <org> [repo]
-# Output: findings/<org>/cloud-resources.json
+# Output: scans/<org>/cloud-resources.json
 
 show_help() {
     cat << 'EOF'
@@ -29,7 +29,7 @@ What it extracts:
   - API Gateway endpoints
 
 Output:
-  findings/<org>/cloud-resources.json
+  scans/<org>/cloud-resources.json
 
 Examples:
   ./scripts/extract-cloud-resources.sh acme-corp
@@ -46,7 +46,7 @@ ORG="$1"
 REPO="${2:-}"
 
 ORG_DIR="$(pwd)/$ORG"
-OUTPUT_DIR="$(pwd)/findings/$ORG"
+OUTPUT_DIR="$(pwd)/scans/$ORG"
 OUTPUT_FILE="$OUTPUT_DIR/cloud-resources.json"
 
 mkdir -p "$OUTPUT_DIR"

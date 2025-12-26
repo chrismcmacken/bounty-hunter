@@ -256,7 +256,7 @@ echo "Cloning to: ./$CLONE_DIR"
 echo ""
 
 mkdir -p "$CLONE_DIR"
-mkdir -p "findings/$ORG/"{semgrep-results,trufflehog-results,artifact-results,reports}
+mkdir -p "scans/$ORG/"{semgrep-results,trufflehog-results,artifact-results,kics-results,inventory}
 
 # Create/update archived repos manifest
 ARCHIVED_MANIFEST="$CLONE_DIR/.archived-repos"

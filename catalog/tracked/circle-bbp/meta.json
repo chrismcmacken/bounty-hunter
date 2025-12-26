@@ -1,0 +1,14 @@
+{
+  "name": "circle-bbp",
+  "platform": "hackerone",
+  "github_org": "circlefin",
+  "program_url": "",
+  "scope": {
+    "in_scope": [],
+    "out_of_scope": []
+  },
+  "added_date": "2025-12-25",
+  "status": "archived",
+  "notes": "",
+  "archived_date": "2025-12-26"
+}

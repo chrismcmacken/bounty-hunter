@@ -124,8 +124,8 @@ trufflehog_init() {
         fi
         REPO=""
     else
-        # FINDINGS MODE: Read from findings/ directory (per-repo NDJSON files)
-        RESULTS_DIR="findings/$ORG/$RESULTS_TYPE"
+        # SCANS MODE: Read from scans/ directory (per-repo NDJSON files)
+        RESULTS_DIR="scans/$ORG/$RESULTS_TYPE"
 
         if [[ ! -d "$RESULTS_DIR" ]]; then
             err "Results directory not found: $RESULTS_DIR"

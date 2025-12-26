@@ -7,7 +7,7 @@ set -euo pipefail
 # using wordlist-based fuzzing.
 #
 # Usage: ./scripts/scan-ffuf.sh <org-name> <url> [options]
-# Output: findings/<org>/dynamic-results/ffuf/<hash>-<mode>.json
+# Output: scans/<org>/dynamic-results/ffuf/<hash>-<mode>.json
 
 show_help() {
     cat << 'EOF'
@@ -84,7 +84,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-RESULTS_DIR="$(pwd)/findings/$ORG/dynamic-results/ffuf"
+RESULTS_DIR="$(pwd)/scans/$ORG/dynamic-results/ffuf"
 mkdir -p "$RESULTS_DIR"
 
 # Generate output filename from URL if not specified

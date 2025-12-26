@@ -51,18 +51,18 @@ echo ""
 
 # Find scan result JSON files that should be gzipped
 # Patterns: semgrep.json, trufflehog.json, kics.json, artifacts.json in catalog scans
-# Also: *.json in findings/*/semgrep-results, trufflehog-results, etc.
+# Also: *.json in scans/*/semgrep-results, trufflehog-results, etc.
 
 SCAN_PATTERNS=(
     "catalog/tracked/*/scans/*/semgrep.json"
     "catalog/tracked/*/scans/*/trufflehog.json"
     "catalog/tracked/*/scans/*/kics.json"
     "catalog/tracked/*/scans/*/artifacts.json"
-    "findings/*/semgrep-results/*.json"
-    "findings/*/trufflehog-results/*.json"
-    "findings/*/kics-results/*.json"
-    "findings/*/artifact-results/*.json"
-    "findings/*/inventory/*-sbom.json"
+    "scans/*/semgrep-results/*.json"
+    "scans/*/trufflehog-results/*.json"
+    "scans/*/kics-results/*.json"
+    "scans/*/artifact-results/*.json"
+    "scans/*/inventory/*-sbom.json"
 )
 
 found_files=()

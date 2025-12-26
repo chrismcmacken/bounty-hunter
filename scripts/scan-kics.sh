@@ -51,7 +51,7 @@ done
 export QUIET_MODE
 
 REPOS_DIR="${REPOS_DIR:-$ORG}"
-OUTPUT_BASE="${OUTPUT_BASE:-findings/$ORG}"
+OUTPUT_BASE="${OUTPUT_BASE:-scans/$ORG}"
 
 if [[ ! -d "$REPOS_DIR" ]]; then
     echo "Error: Directory '$REPOS_DIR' not found."

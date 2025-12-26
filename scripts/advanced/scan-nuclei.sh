@@ -7,7 +7,7 @@ set -euo pipefail
 # using Nuclei's template library.
 #
 # Usage: ./scripts/scan-nuclei.sh <org-name> [options]
-# Output: findings/<org>/dynamic-results/nuclei/<scan-name>.json
+# Output: scans/<org>/dynamic-results/nuclei/<scan-name>.json
 
 show_help() {
     cat << 'EOF'
@@ -47,7 +47,7 @@ Examples:
   ./scripts/scan-nuclei.sh acme-corp --tags "rce,sqli,ssrf"
 
 Prerequisites:
-  - Targets file: findings/<org>/dynamic-results/targets.txt
+  - Targets file: scans/<org>/dynamic-results/targets.txt
   - Run ./scripts/recon-targets.sh to set up targets
 EOF
     exit 0
@@ -81,8 +81,8 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-RESULTS_DIR="$(pwd)/findings/$ORG/dynamic-results/nuclei"
-TARGETS_FILE="$(pwd)/findings/$ORG/dynamic-results/targets.txt"
+RESULTS_DIR="$(pwd)/scans/$ORG/dynamic-results/nuclei"
+TARGETS_FILE="$(pwd)/scans/$ORG/dynamic-results/targets.txt"
 OUTPUT_FILE="$RESULTS_DIR/$OUTPUT_NAME.json"
 LOG_FILE="$RESULTS_DIR/$OUTPUT_NAME.log"
 

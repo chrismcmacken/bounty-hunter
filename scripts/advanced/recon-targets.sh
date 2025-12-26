@@ -43,7 +43,7 @@ Examples:
   ./scripts/recon-targets.sh acme-corp clear
 
 Output:
-  findings/<org>/dynamic-results/targets.txt
+  scans/<org>/dynamic-results/targets.txt
 EOF
     exit 0
 }
@@ -56,7 +56,7 @@ ORG="$1"
 COMMAND="$2"
 shift 2
 
-RESULTS_DIR="$(pwd)/findings/$ORG/dynamic-results"
+RESULTS_DIR="$(pwd)/scans/$ORG/dynamic-results"
 TARGETS_FILE="$RESULTS_DIR/targets.txt"
 RECON_URLS="$RESULTS_DIR/recon/live-urls.txt"
 

@@ -5,7 +5,7 @@ set -euo pipefail
 #
 # Data sources:
 #   - Languages: catalog/languages.json (global)
-#   - SBOMs: findings/<org>/inventory/*-sbom.json.gz (per-repo, gzipped)
+#   - SBOMs: scans/<org>/inventory/*-sbom.json.gz (per-repo, gzipped)
 #
 # Dependencies: duckdb, jq
 
@@ -123,15 +123,15 @@ build_sbom_pattern() {
 
 if [[ "$ALL_ORGS" == true ]]; then
     # For all orgs, build a pattern that covers both formats
-    SBOM_PATTERN="$ROOT_DIR/findings/*/inventory/*-sbom.json*"
+    SBOM_PATTERN="$ROOT_DIR/scans/*/inventory/*-sbom.json*"
 elif [[ -n "$REPO" ]]; then
-    if [[ -f "$ROOT_DIR/findings/$ORG/inventory/${REPO}-sbom.json.gz" ]]; then
-        SBOM_PATTERN="$ROOT_DIR/findings/$ORG/inventory/${REPO}-sbom.json.gz"
+    if [[ -f "$ROOT_DIR/scans/$ORG/inventory/${REPO}-sbom.json.gz" ]]; then
+        SBOM_PATTERN="$ROOT_DIR/scans/$ORG/inventory/${REPO}-sbom.json.gz"
     else
-        SBOM_PATTERN="$ROOT_DIR/findings/$ORG/inventory/${REPO}-sbom.json"
+        SBOM_PATTERN="$ROOT_DIR/scans/$ORG/inventory/${REPO}-sbom.json"
     fi
 else
-    SBOM_PATTERN=$(build_sbom_pattern "$ROOT_DIR/findings/$ORG/inventory" "*-sbom.json")
+    SBOM_PATTERN=$(build_sbom_pattern "$ROOT_DIR/scans/$ORG/inventory" "*-sbom.json")
 fi
 
 # Check if data exists
